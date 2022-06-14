@@ -5,86 +5,8 @@ plugins {
 dependencies {
 }
 
-abstract class AstGenerator extends DefaultTask {
-	@Input
-	abstract MapProperty<String, List<String>> getAsts()
-
-	@Internal
-	final Provider<Directory> outDir
-
-	@Inject
-	AstGenerator(ProjectLayout layout) {
-		this.outDir = layout.buildDir
-			.map { it.dir('generated') }
-			.map { it.dir('lox') }
-	}
-
-	@TaskAction
-	def generateSource() {
-		outDir.get().getAsFile().mkdirs()
-
-		this.asts.get().each { kind, nodes ->
-			logger.quiet "generating AST source for kind ${kind}..."
-
-			def outFile = outDir.map { it.file("${kind}.java") }.get().getAsFile()
-
-			logger.quiet " - output to ${outFile.path}"
-			outFile.createNewFile()
-			def writer = new PrintWriter(outFile, 'UTF-8')
-
-			logger.quiet " - writing prelude"
-			writer.println "package lox;"
-			writer.println ""
-			writer.println "import java.util.List;"
-			writer.println ""
-
-			logger.quiet " - writing class ${kind}"
-			writer.println "abstract class ${kind} {"
-			nodes.each { node ->
-				def split = node.split(':')
-				def type = split[0].trim()
-				def fields = split[1].trim()
-				def fieldsList = fields.split(', ')
-
-				logger.quiet "  - writing variant ${type}"
-				writer.println " static class ${type} extends ${kind} {"
-
-				// fields
-				fieldsList.each { field ->
-					logger.quiet "   - ${field}"
-					writer.println "  final ${field};"
-				}
-
-				// constructor
-				writer.println "  ${type}(${fields}) {"
-				fieldsList.each { field ->
-					def name = field.split(' ')[1];
-					writer.println "   this.${name} = ${name};"
-				}
-				writer.println "  }"
-
-				writer.println " }"
-			}
-
-			writer.println "}"
-			writer.close()
-		}
-	}
-}
-
-def genAstsTask = tasks.register('generateAsts', AstGenerator) {
-	asts.put('Expr', [
-		"Binary : Expr left, Token operator, Expr right",
-		"Grouping : Expr expression",
-		"Literal : Object value",
-		"Unary : Token operator, Expr right"
-	])
-}
-
 application {
   mainClass = 'lox.Lox'
 }
 
-// automatically regenerate AST sources when compiling lox
-tasks.getByName('compileJava').dependsOn genAstsTask
-tasks.getByName('compileTestJava').dependsOn genAstsTask
+apply from: 'generate-asts.gradle'

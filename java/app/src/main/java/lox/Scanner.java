@@ -1,6 +1,5 @@
 package lox;
 
-import java.io.EOFException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
