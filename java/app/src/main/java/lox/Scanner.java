@@ -203,6 +203,12 @@ public class Scanner {
 					this.addToken(SLASH);
 				}
 				break;
+			case '?':
+				this.addToken(QUESTION);
+				break;
+			case ':':
+				this.addToken(COLON);
+				break;
 
 			case '"':
 				this.string();

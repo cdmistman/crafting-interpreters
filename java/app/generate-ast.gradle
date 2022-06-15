@@ -1,0 +1,180 @@
+abstract class AstGenerator extends DefaultTask {
+	@Input
+	abstract MapProperty<String, List<String>> getAsts()
+
+	@Internal
+	final Provider<Directory> outDir
+
+	@Inject
+	AstGenerator(ProjectLayout layout) {
+		this.outDir = layout.buildDir
+			.map { it.dir('generated') }
+			.map { it.dir('lox') }
+	}
+
+	// @TaskAction
+	// def defineAst() {
+	// 	outDir.get().getAsFile().mkdirs()
+
+	// 	this.asts.get().each { kind, nodes ->
+	// 		logger.quiet "generating AST source for kind ${kind}..."
+
+	// 		def outFile = outDir.map { it.file("${kind}.java") }.get().getAsFile()
+
+	// 		logger.quiet " - output to ${outFile.path}"
+	// 		outFile.createNewFile()
+	// 		def writer = new PrintWriter(outFile, 'UTF-8')
+
+	// 		logger.quiet " - writing prelude"
+	// 		writer.println "package lox;"
+	// 		writer.println ""
+	// 		writer.println "import java.util.List;"
+	// 		writer.println ""
+
+	// 		logger.quiet " - writing class ${kind}"
+	// 		writer.println "abstract class ${kind} {"
+	// 		nodes.each { node ->
+	// 			def split = node.split(':')
+	// 			def type = split[0].trim()
+	// 			def fields = split[1].trim()
+	// 			def fieldsList = fields.split(', ')
+
+	// 			defineType(
+	// 				writer,
+
+	// 			)
+
+	// 			logger.quiet "  - writing variant ${type}"
+	// 			writer.println " static class ${type} extends ${kind} {"
+
+	// 			// fields
+	// 			fieldsList.each { field ->
+	// 				logger.quiet "   - ${field}"
+	// 				writer.println "  final ${field};"
+	// 			}
+
+	// 			// constructor
+	// 			writer.println "  ${type}(${fields}) {"
+	// 			fieldsList.each { field ->
+	// 				def name = field.split(' ')[1];
+	// 				writer.println "   this.${name} = ${name};"
+	// 			}
+	// 			writer.println "  }"
+
+	// 			writer.println " }"
+	// 		}
+
+	// 		writer.println "}"
+	// 		writer.close()
+	// 	}
+	// }
+
+	@TaskAction
+	def generateAsts() throws IOException {
+		def outputDir = outDir.get()
+		outputDir.getAsFile().mkdirs()
+
+		asts.get().each { baseName, types ->
+			defineAst(outputDir, baseName, types)
+		}
+	}
+
+	def defineAst(
+		Directory outputDir,
+		String baseName,
+		List<String> types
+	) throws IOException {
+		def outputFile = outputDir.file("${baseName}.java").getAsFile()
+		outputFile.createNewFile()
+		def writer = new PrintWriter(outputFile, 'UTF-8')
+
+		writer.println 'package lox;'
+		writer.println ''
+		writer.println 'import java.util.List;';
+		writer.println ''
+		writer.println "abstract class ${baseName} {"
+
+		defineVisitor(writer, baseName, types)
+
+		// AST classes
+		types.each { type ->
+			def className = type.split(':')[0].trim()
+			def fields = type.split(':')[1].trim() as String
+			defineType(
+				writer,
+				baseName,
+				className,
+				fields
+			)
+		}
+
+		// The base accept() method
+		writer.println()
+		writer.println ' abstract <R> R accept(Visitor<R> visitor);'
+
+		writer.println '}'
+		writer.close();
+	}
+
+	def defineVisitor(
+		PrintWriter writer,
+		String baseName,
+		List<String> types
+	) {
+		writer.println ' interface Visitor<R> {'
+
+		types.each { type ->
+			def typeName = type.split(':')[0].trim()
+			writer.println "  R visit${typeName}${baseName}(${typeName} ${baseName.toLowerCase()});"
+		}
+
+		writer.println ' }'
+	}
+
+	def defineType(
+		PrintWriter writer,
+		String baseName,
+		String className,
+		String fieldList
+	) {
+		writer.println " static class ${className} extends ${baseName} {"
+
+		def fields = fieldList.split(', ')
+
+		// Constructor
+		writer.println "  ${className}(${fieldList}) {"
+		fields.each { field ->
+			def name = field.split(' ')[1];
+			writer.println "   this.${name} = ${name};"
+		}
+		writer.println "  }"
+
+		// Visitor pattern
+		writer.println ''
+		writer.println ' @Override'
+		writer.println ' <R> R accept(Visitor<R> visitor) {'
+		writer.println "  return visitor.visit${className}${baseName}(this);"
+		writer.println ' }'
+
+		// Fields
+		writer.println ""
+		fields.each { field ->
+			writer.println "  final ${field};"
+		}
+
+		writer.println " }"
+	}
+}
+
+def genAstTask = tasks.register('generateAst', AstGenerator) {
+	asts.put('Expr', [
+		"Binary : Expr left, Token operator, Expr right",
+		"Grouping : Expr expression",
+		"Literal : Object value",
+		"Unary : Token operator, Expr right"
+	])
+}
+
+// automatically regenerate AST sources when compiling lox
+tasks.getByName('compileJava').dependsOn genAstTask
+tasks.getByName('compileTestJava').dependsOn genAstTask

@@ -9,4 +9,7 @@ application {
   mainClass = 'lox.Lox'
 }
 
-apply from: 'generate-asts.gradle'
+// enable using the repl
+tasks.getByName('run').standardInput = System.in
+
+apply from: 'generate-ast.gradle'
