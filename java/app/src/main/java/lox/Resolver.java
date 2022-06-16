@@ -8,6 +8,7 @@ import java.util.Stack;
 public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 	private final Interpreter interpreter;
 	private final Stack<Map<String, Boolean>> scopes = new Stack<>();
+	private FunctionType currentFunction = FunctionType.NONE;
 
 	Resolver(Interpreter interpreter) {
 		this.interpreter = interpreter;
@@ -19,7 +20,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 		}
 	}
 
-	private void resolveFunction(Stmt.Function function) {
+	private void resolveFunction(Stmt.Function function, FunctionType type) {
+		var enclosingFunction = currentFunction;
+		currentFunction = type;
+
 		beginScope();
 		for (var param : function.params) {
 			declare(param);
@@ -27,6 +31,17 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 		}
 		resolve(function.body);
 		endScope();
+
+		currentFunction = enclosingFunction;
+	}
+
+	private void resolveLocal(Expr expr, Token name) {
+		for (var i = scopes.size() - 1; i >= 0; i--) {
+			if (scopes.get(i).containsKey(name.lexeme)) {
+				interpreter.resolve(expr, scopes.size() - 1 - i);
+				return;
+			}
+		}
 	}
 
 	private void beginScope() {
@@ -52,15 +67,6 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 		if (scopes.isEmpty())
 			return;
 		scopes.peek().put(name.lexeme, true);
-	}
-
-	private void resolveLocal(Expr expr, Token name) {
-		for (var i = scopes.size() - 1; i >= 0; i--) {
-			if (scopes.get(i).containsKey(name.lexeme)) {
-				interpreter.resolve(expr, scopes.size() - 1 - i);
-				return;
-			}
-		}
 	}
 
 	@Override
@@ -91,7 +97,7 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 		declare(stmt.name);
 		define(stmt.name);
 
-		resolveFunction(stmt);
+		resolveFunction(stmt, FunctionType.FUNCTION);
 		return null;
 	}
 
@@ -103,6 +109,10 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 
 	@Override
 	public Void visitReturnStmt(Stmt.Return stmt) {
+		if (currentFunction == FunctionType.NONE) {
+			Lox.error(stmt.keyword, "Can't return from top-level code.");
+		}
+
 		if (stmt.value != null)
 			resolve(stmt.value);
 		return null;
@@ -191,4 +201,9 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 	private void resolve(Expr expr) {
 		expr.accept(this);
 	}
+}
+
+enum FunctionType {
+	NONE,
+	FUNCTION,
 }
