@@ -146,7 +146,13 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 	@Override
 	public Object visitAssignExpr(Expr.Assign expr) {
 		var value = evaluate(expr.value);
-		environment.assign(expr.name, value);
+		var distance = locals.get(expr);
+		if (distance != null) {
+			environment.assignAt(distance, expr.name, value);
+		} else {
+			globals.assign(expr.name, value);
+		}
+
 		return value;
 	}
 
