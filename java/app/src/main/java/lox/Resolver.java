@@ -42,6 +42,9 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 			return;
 
 		var scope = scopes.peek();
+		if (scope.containsKey(name.lexeme)) {
+			Lox.error(name, "Already a variable with this name in this scope.");
+		}
 		scope.put(name.lexeme, false);
 	}
 
