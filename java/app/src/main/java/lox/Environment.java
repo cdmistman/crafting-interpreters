@@ -20,17 +20,28 @@ public class Environment {
 			return values.get(name.lexeme);
 		}
 
-		// try {
-			if (enclosing != null) return enclosing.get(name);
-		// } catch (RuntimeError error) {
-		// 	// better for stack traces
-		// }
+		if (enclosing != null)
+			return enclosing.get(name);
 
 		throw new RuntimeError(name, "Undefined variable '" + name.lexeme + "'.");
 	}
 
 	public void define(String name, Object value) {
 		values.put(name, value);
+	}
+
+	Environment ancestor(int distance) {
+		var environment = this;
+		for (var i = 0; i < distance; i++) {
+			assert environment != null;
+			environment = environment.enclosing;
+		}
+		assert environment != null;
+		return environment;
+	}
+
+	Object getAt(int distance, String name) {
+		return ancestor(distance).values.get(name);
 	}
 
 	public void assign(Token name, Object value) {
