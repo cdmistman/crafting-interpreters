@@ -1,17 +1,23 @@
 package lox;
 
-public class Interpreter implements Expr.Visitor<Object> {
-	void interpret(Expr expression) {
+import java.util.List;
+
+public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
+	private Environment environment = new Environment();
+
+	void interpret(List<Stmt> statements) {
 		try {
-			var value = evaluate(expression);
-			System.out.println(stringify(value));
+			for (var statement : statements) {
+				execute(statement);
+			}
 		} catch (RuntimeError error) {
 			Lox.runtimeError(error);
 		}
 	}
 
 	private String stringify(Object object) {
-		if (object == null) return "nil";
+		if (object == null)
+			return "nil";
 
 		if (object instanceof Double) {
 			var text = object.toString();
@@ -24,34 +30,62 @@ public class Interpreter implements Expr.Visitor<Object> {
 		return object.toString();
 	}
 
+	private void execute(Stmt stmt) {
+		stmt.accept(this);
+	}
+
+	private void executeBlock(List<Stmt> statements, Environment environment) {
+		var previous = this.environment;
+		try {
+			this.environment = environment;
+
+			for (var statement : statements) {
+				execute(statement);
+			}
+		} finally {
+			this.environment = previous;
+		}
+	}
+
 	private Object evaluate(Expr expr) {
 		return expr.accept(this);
 	}
 
 	@Override
-	public Object visitLiteralExpr(Expr.Literal expr) {
-		return expr.value;
+	public Void visitBlockStmt(Stmt.Block stmt) {
+		executeBlock(stmt.statements, new Environment(environment));
+		return null;
 	}
 
 	@Override
-	public Object visitGroupingExpr(Expr.Grouping expr) {
-		return evaluate(expr.expression);
+	public Void visitExpressionStmt(Stmt.Expression stmt) {
+		evaluate(stmt.expression);
+		return null;
 	}
 
 	@Override
-	public Object visitUnaryExpr(Expr.Unary expr) {
-		Object right = evaluate(expr.right);
+	public Void visitPrintStmt(Stmt.Print stmt) {
+		var value = evaluate(stmt.expression);
+		System.out.println(stringify(value));
+		return null;
+	}
 
-		switch (expr.operator.type) {
-			case BANG:
-				return !isTruthy(right);
-			case MINUS:
-				checkNumberOperand(expr.operator, right);
-				return -(double) right;
+	@Override
+	public Void visitVarStmt(Stmt.Var stmt) {
+		Object value = null;
+		if (stmt.initializer != null) {
+			value = evaluate(stmt.initializer);
 		}
 
-		// unreachable
+		environment.define(stmt.name.lexeme, value);
 		return null;
+	}
+
+	@Override
+	public Object visitAssignExpr(Expr.Assign expr) {
+		var value = evaluate(expr.value);
+		environment.assign(expr.name, value);
+		return value;
 	}
 
 	@Override
@@ -102,10 +136,47 @@ public class Interpreter implements Expr.Visitor<Object> {
 			case STAR:
 				checkNumberOperands(expr.operator, left, right);
 				return (double) left * (double) right;
+
+			default:
+				break;
 		}
 
 		// unreachable
 		return null;
+	}
+
+	@Override
+	public Object visitLiteralExpr(Expr.Literal expr) {
+		return expr.value;
+	}
+
+	@Override
+	public Object visitGroupingExpr(Expr.Grouping expr) {
+		return evaluate(expr.expression);
+	}
+
+	@Override
+	public Object visitUnaryExpr(Expr.Unary expr) {
+		Object right = evaluate(expr.right);
+
+		switch (expr.operator.type) {
+			case BANG:
+				return !isTruthy(right);
+			case MINUS:
+				checkNumberOperand(expr.operator, right);
+				return -(double) right;
+
+			default:
+				break;
+		}
+
+		// unreachable
+		return null;
+	}
+
+	@Override
+	public Object visitVariableExpr(Expr.Variable expr) {
+		return environment.get(expr.name);
 	}
 
 	private void checkNumberOperand(Token operator, Object operand) {

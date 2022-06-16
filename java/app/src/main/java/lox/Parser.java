@@ -1,5 +1,6 @@
 package lox;
 
+import java.util.ArrayList;
 import java.util.List;
 
 import static lox.TokenType.*;
@@ -15,12 +16,69 @@ public class Parser {
 		this.tokens = tokens;
 	}
 
-	Expr parse() {
+	List<Stmt> parse() {
+		var statements = new ArrayList<Stmt>();
+		while (!isAtEnd()) {
+			statements.add(declaration());
+		}
+
+		return statements;
+	}
+
+	private Stmt declaration() {
 		try {
-			return expression();
+			if (match(VAR))
+				return varDeclaration();
+
+			return statement();
 		} catch (ParseError error) {
+			synchronize();
 			return null;
 		}
+	}
+
+	private Stmt varDeclaration() {
+		var name = consume(IDENTIFIER, "Expect variable name.");
+
+		Expr initializer = null;
+		if (match(EQUAL)) {
+			initializer = expression();
+		}
+
+		consume(SEMICOLON, "Expect ';' after variable declaration");
+		return new Stmt.Var(name, initializer);
+	}
+
+	private Stmt statement() {
+		if (match(PRINT))
+			return printStatement();
+		if (match(LEFT_BRACE))
+			return new Stmt.Block(block());
+
+		return expressionStatement();
+	}
+
+	private List<Stmt> block() {
+		var statements = new ArrayList<Stmt>();
+
+		while (!check(RIGHT_BRACE) && !isAtEnd()) {
+			statements.add(declaration());
+		}
+
+		consume(RIGHT_BRACE, "Expect '}' after block.");
+		return statements;
+	}
+
+	private Stmt printStatement() {
+		var value = expression();
+		consume(SEMICOLON, "Expect ';' after value.");
+		return new Stmt.Print(value);
+	}
+
+	private Stmt expressionStatement() {
+		var expr = expression();
+		consume(SEMICOLON, "Expect ';' after expression.");
+		return new Stmt.Expression(expr);
 	}
 
 	private Expr expression() {
@@ -28,12 +86,30 @@ public class Parser {
 	}
 
 	private Expr comma() {
-		var expr = ternary();
+		var expr = assignment();
 
 		while (match(COMMA)) {
 			var operator = previous();
-			var right = ternary();
+			var right = comma();
 			expr = new Expr.Binary(expr, operator, right);
+		}
+
+		return expr;
+	}
+
+	private Expr assignment() {
+		var expr = ternary();
+
+		if (match(EQUAL)) {
+			var equals = previous();
+			var value = assignment();
+
+			if (expr instanceof Expr.Variable) {
+				var name = ((Expr.Variable) expr).name;
+				return new Expr.Assign(name, value);
+			}
+
+			error(equals, "Invalid assignment target.");
 		}
 
 		return expr;
@@ -42,7 +118,8 @@ public class Parser {
 	private Expr ternary() {
 		var cond = equality();
 
-		if (!match(QUESTION)) return cond;
+		if (!match(QUESTION))
+			return cond;
 
 		var question = previous();
 		var then = expression();
@@ -128,6 +205,9 @@ public class Parser {
 		if (match(NUMBER, STRING)) {
 			return new Expr.Literal(previous().literal);
 		}
+		if (match(IDENTIFIER)) {
+			return new Expr.Variable(previous());
+		}
 
 		if (match(LEFT_PAREN)) {
 			var expr = expression();
@@ -202,6 +282,9 @@ public class Parser {
 				case PRINT:
 				case RETURN:
 					return;
+
+				default:
+					break;
 			}
 
 			advance();

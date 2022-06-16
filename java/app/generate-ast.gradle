@@ -151,10 +151,10 @@ abstract class AstGenerator extends DefaultTask {
 
 		// Visitor pattern
 		writer.println ''
-		writer.println ' @Override'
-		writer.println ' <R> R accept(Visitor<R> visitor) {'
-		writer.println "  return visitor.visit${className}${baseName}(this);"
-		writer.println ' }'
+		writer.println '  @Override'
+		writer.println '  <R> R accept(Visitor<R> visitor) {'
+		writer.println "   return visitor.visit${className}${baseName}(this);"
+		writer.println '  }'
 
 		// Fields
 		writer.println ""
@@ -168,10 +168,19 @@ abstract class AstGenerator extends DefaultTask {
 
 def genAstTask = tasks.register('generateAst', AstGenerator) {
 	asts.put('Expr', [
-		"Binary : Expr left, Token operator, Expr right",
-		"Grouping : Expr expression",
-		"Literal : Object value",
-		"Unary : Token operator, Expr right"
+		'Assign : Token name, Expr value',
+		'Binary : Expr left, Token operator, Expr right',
+		'Grouping : Expr expression',
+		'Literal : Object value',
+		'Unary : Token operator, Expr right',
+		'Variable : Token name',
+	])
+
+	asts.put('Stmt', [
+		'Block : List<Stmt> statements',
+		'Expression : Expr expression',
+		'Print : Expr expression',
+		'Var : Token name, Expr initializer',
 	])
 }
 

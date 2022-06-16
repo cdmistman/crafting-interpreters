@@ -33,7 +33,8 @@ public class Lox {
 		run(new String(bytes, Charset.defaultCharset()));
 		if (hadError)
 			System.exit(65);
-		if (hadRuntimeError) System.exit(70);
+		if (hadRuntimeError)
+			System.exit(70);
 	}
 
 	private static void runPrompt() throws IOException {
@@ -54,12 +55,13 @@ public class Lox {
 		var scanner = new Scanner(input);
 		var tokens = scanner.scanTokens();
 		var parser = new Parser(tokens);
-		var expression = parser.parse();
+		var statements = parser.parse();
 
 		// stop if there was a syntax error
-		if (hadError) return;
+		if (hadError)
+			return;
 
-		interpreter.interpret(expression);
+		interpreter.interpret(statements);
 	}
 
 	static void error(int line, String message) {
@@ -75,7 +77,8 @@ public class Lox {
 	}
 
 	static void runtimeError(RuntimeError error) {
-		System.err.println(error.getMessage() + "\n[line " + error.token.line + "]");
+		System.err.println(error.getMessage());
+		System.err.println("[line " + error.token.line + "]");
 		hadRuntimeError = true;
 	}
 
