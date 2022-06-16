@@ -28,6 +28,8 @@ public class Parser {
 
 	private Stmt declaration() {
 		try {
+			if (match(FUN))
+				return function("function");
 			if (match(VAR))
 				return varDeclaration();
 
@@ -36,6 +38,27 @@ public class Parser {
 			synchronize();
 			return null;
 		}
+	}
+
+	private Stmt.Function function(String kind) {
+		var name = consume(IDENTIFIER, "Expect " + kind + " name.");
+
+		// parameter list and parentheses wrapped around it
+		consume(LEFT_PAREN, "Expect '(' after " + kind + " name.");
+		var parameters = new ArrayList<Token>();
+		if (!check(RIGHT_PAREN)) {
+			do {
+				if (parameters.size() >= 255) {
+					error(peek(), "Can't have more than 255 parameters.");
+				}
+				parameters.add(consume(IDENTIFIER, "Expect parameter name"));
+			} while (match(COMMA));
+		}
+		consume(RIGHT_PAREN, "Expect ')' after parameters.");
+
+		consume(LEFT_BRACE, "Expect '{' before " + kind + " body.");
+		var body = block();
+		return new Stmt.Function(name, parameters, body);
 	}
 
 	private Stmt varDeclaration() {
@@ -53,7 +76,8 @@ public class Parser {
 	private Stmt statement() {
 		if (match(LEFT_BRACE))
 			return new Stmt.Block(block());
-		if (match(FOR)) return forStatement();
+		if (match(FOR))
+			return forStatement();
 		if (match(IF))
 			return ifStatement();
 		if (match(PRINT))
@@ -103,10 +127,12 @@ public class Parser {
 
 		if (increment != null) {
 			body = new Stmt.Block(
-				Arrays.asList(body, new Stmt.Expression(increment)));
+					Arrays.asList(body, new Stmt.Expression(increment)));
 		}
 
-		if (condition == null) condition = new Expr.Literal(true);
+		if (condition == null) {
+			condition = new Expr.Literal(true);
+		}
 		body = new Stmt.While(condition, body);
 
 		if (initializer != null) {
@@ -152,23 +178,11 @@ public class Parser {
 	}
 
 	private Expr expression() {
-		return comma();
-	}
-
-	private Expr comma() {
-		var expr = assignment();
-
-		while (match(COMMA)) {
-			var operator = previous();
-			var right = comma();
-			expr = new Expr.Binary(expr, operator, right);
-		}
-
-		return expr;
+		return assignment();
 	}
 
 	private Expr assignment() {
-		var expr = ternary();
+		var expr = or();
 
 		if (match(EQUAL)) {
 			var equals = previous();
@@ -182,27 +196,6 @@ public class Parser {
 			error(equals, "Invalid assignment target.");
 		}
 
-		return expr;
-	}
-
-	private Expr ternary() {
-		var cond = or();
-
-		if (!match(QUESTION))
-			return cond;
-
-		var question = previous();
-		var then = expression();
-
-		if (!match(COLON)) {
-			throw error(peek(), "Expect ':' in ternary operation");
-		}
-
-		var colon = previous();
-		var els = expression();
-
-		var branches = new Expr.Binary(then, colon, els);
-		var expr = new Expr.Binary(cond, question, branches);
 		return expr;
 	}
 
@@ -285,7 +278,38 @@ public class Parser {
 			return new Expr.Unary(operator, right);
 		}
 
-		return primary();
+		return call();
+	}
+
+	private Expr call() {
+		var expr = primary();
+
+		while (true) {
+			if (match(LEFT_PAREN)) {
+				expr = finishCall(expr);
+			} else {
+				break;
+			}
+		}
+
+		return expr;
+	}
+
+	private Expr finishCall(Expr callee) {
+		var arguments = new ArrayList<Expr>();
+
+		if (!check(RIGHT_PAREN)) {
+			do {
+				if (arguments.size() >= 255) {
+					error(peek(), "Can't have more than 255 arguments.");
+				}
+				arguments.add(expression());
+
+			} while (match(COMMA));
+		}
+
+		var paren = consume(RIGHT_PAREN, "Expect ')' after arguments.");
+		return new Expr.Call(callee, paren, arguments);
 	}
 
 	private Expr primary() {
