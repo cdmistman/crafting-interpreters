@@ -91,7 +91,8 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
 		var methods = new HashMap<String, LoxFunction>();
 		for (var method : stmt.methods) {
-			var function = new LoxFunction(method, environment);
+			var function = new LoxFunction(method, environment,
+					method.name.lexeme.equals("init"));
 			methods.put(method.name.lexeme, function);
 		}
 		var klass = new LoxClass(stmt.name.lexeme, methods);
@@ -108,7 +109,7 @@ public class Interpreter implements Expr.Visitor<Object>, Stmt.Visitor<Void> {
 
 	@Override
 	public Void visitFunctionStmt(Stmt.Function stmt) {
-		var function = new LoxFunction(stmt, environment);
+		var function = new LoxFunction(stmt, environment, false);
 		environment.define(stmt.name.lexeme, function);
 		return null;
 	}
