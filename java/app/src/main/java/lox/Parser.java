@@ -220,6 +220,9 @@ public class Parser {
 			if (expr instanceof Expr.Variable) {
 				var name = ((Expr.Variable) expr).name;
 				return new Expr.Assign(name, value);
+			} else if (expr instanceof Expr.Get) {
+				var get = (Expr.Get)expr;
+				return new Expr.Set(get.object, get.name, value);
 			}
 
 			error(equals, "Invalid assignment target.");
