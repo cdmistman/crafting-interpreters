@@ -354,6 +354,7 @@ public class Parser {
 			return new Expr.Literal(true);
 		if (match(NIL))
 			return new Expr.Literal(null);
+		if (match(THIS)) return new Expr.This(previous());
 
 		if (match(NUMBER, STRING)) {
 			return new Expr.Literal(previous().literal);

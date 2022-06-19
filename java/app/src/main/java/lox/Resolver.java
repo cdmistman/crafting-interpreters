@@ -82,10 +82,15 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 		declare(stmt.name);
 		define(stmt.name);
 
+		beginScope();
+		scopes.peek().put("this", true);
+
 		for (var method : stmt.methods) {
 			var declaration = FunctionType.METHOD;
 			resolveFunction(method, declaration);
 		}
+
+		endScope();
 
 		return null;
 	}
@@ -201,6 +206,12 @@ public class Resolver implements Expr.Visitor<Void>, Stmt.Visitor<Void> {
 	public Void visitSetExpr(Expr.Set expr) {
 		resolve(expr.value);
 		resolve(expr.object);
+		return null;
+	}
+
+	@Override
+	public Void visitThisExpr(Expr.This expr) {
+		resolveLocal(expr, expr.keyword);
 		return null;
 	}
 
