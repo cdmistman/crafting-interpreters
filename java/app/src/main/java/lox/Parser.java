@@ -44,6 +44,11 @@ public class Parser {
 
 	private Stmt.Class classDeclaration() {
 		var name = consume(IDENTIFIER, "Expect class name.");
+		Expr.Variable superclass = null;
+		if (match(LESS)) {
+			consume(IDENTIFIER, "Expect superclass name.");
+			superclass = new Expr.Variable(previous());
+		}
 		consume(LEFT_BRACE, "Expect '{' before class body.");
 
 		var methods = new ArrayList<Stmt.Function>();
@@ -53,7 +58,7 @@ public class Parser {
 
 		consume(RIGHT_BRACE, "Expect '}' after class body.");
 
-		return new Stmt.Class(name, methods);
+		return new Stmt.Class(name, superclass, methods);
 	}
 
 	private Stmt.Function function(String kind) {
@@ -221,7 +226,7 @@ public class Parser {
 				var name = ((Expr.Variable) expr).name;
 				return new Expr.Assign(name, value);
 			} else if (expr instanceof Expr.Get) {
-				var get = (Expr.Get)expr;
+				var get = (Expr.Get) expr;
 				return new Expr.Set(get.object, get.name, value);
 			}
 
@@ -354,7 +359,8 @@ public class Parser {
 			return new Expr.Literal(true);
 		if (match(NIL))
 			return new Expr.Literal(null);
-		if (match(THIS)) return new Expr.This(previous());
+		if (match(THIS))
+			return new Expr.This(previous());
 
 		if (match(NUMBER, STRING)) {
 			return new Expr.Literal(previous().literal);
