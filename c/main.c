@@ -43,7 +43,7 @@ static char* readFile(const char* path) {
 		fprintf(stderr, "Could not read file \"%s\".\n", path);
 		exit(74);
 	}
-	buffer[bytesRead] = "\0";
+	buffer[bytesRead] = '\0';
 
 	fclose(file);
 	return buffer;
