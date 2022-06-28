@@ -4,6 +4,9 @@
 #include "common.h"
 #include "compiler.h"
 #include "scanner.h"
+#ifdef DEBUG_PRINT_CODE
+#include "debug.h"
+#endif // DEBUG_PRINT_CODE
 
 typedef enum {
 	PREC_NONE,
@@ -102,7 +105,14 @@ static uint8_t makeConstant(Value value) {
 	return (uint8_t)constant;
 }
 
-static void endCompiler() { emitReturn(); }
+static void endCompiler() {
+	emitReturn();
+#ifdef DEBUG_PRINT_CODE
+	if (!parser.hadError) {
+		disassembleChunk(currentChunk(), "code");
+	}
+#endif // DEBUG_PRINT_CODE
+}
 
 static void expression();
 static ParseRule* getRule(TokenType type);
