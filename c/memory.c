@@ -1,3 +1,4 @@
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "memory.h"
@@ -9,7 +10,10 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
 	}
 
 	void* result;
-	if (oldSize == 0) {
+	if (pointer == NULL || oldSize == 0) {
+		if (pointer == NULL ^ oldSize == 0) {
+			printf("uh oh");
+		}
 		result = malloc(newSize);
 	} else {
 		result = realloc(pointer, newSize);
