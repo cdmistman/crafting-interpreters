@@ -9,7 +9,7 @@ add_executable(clox
 	debug.c debug.h
 	main.c
 	memory.c memory.h
-	object.h
+	object.c object.h
 	scanner.c scanner.h
 	value.c value.h
 	vm.c vm.h
