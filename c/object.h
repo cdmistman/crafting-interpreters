@@ -12,9 +12,12 @@
 typedef enum {
 	OBJ_STRING,
 } ObjType;
+
 struct Obj {
 	ObjType type;
+	struct Obj* next;
 };
+
 struct ObjString {
 	Obj obj;
 	int length;

@@ -27,9 +27,12 @@ static void runtimeError(const char* format, ...) {
 	resetStack();
 }
 
-void initVM() { resetStack(); }
+void initVM() {
+	resetStack();
+	vm.objects = NULL;
+}
 
-void freeVM() {}
+void freeVM() { freeObjects(); }
 
 void push(Value value) {
 	*vm.stackTop = value;
@@ -51,8 +54,7 @@ static void concatenate() {
 	ObjString* b = AS_STRING(pop());
 	ObjString* a = AS_STRING(pop());
 
-	// `a->length + b->length` actually includes space for 2 null terminators
-	int length = a->length + b->length - 1;
+	int length = a->length + b->length;
 	char* chars = ALLOCATE(char, length + 1);
 	memcpy(chars, a->chars, a->length);
 	memcpy(chars + a->length, b->chars, b->length);
