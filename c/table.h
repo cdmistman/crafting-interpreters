@@ -17,6 +17,8 @@ typedef struct {
 
 void initTable(Table* table);
 void freeTable(Table* table);
+/** Note: `value` is an out parameter **/
+bool tableGet(Table* table, ObjString* key, Value* value);
 bool tableSet(Table* table, ObjString* key, Value value);
 void tableAddAll(Table* from, Table* to);
 
