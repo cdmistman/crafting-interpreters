@@ -20,6 +20,7 @@ void freeTable(Table* table);
 /** Note: `value` is an out parameter **/
 bool tableGet(Table* table, ObjString* key, Value* value);
 bool tableSet(Table* table, ObjString* key, Value value);
+bool tableDelete(Table* table, ObjString* key);
 void tableAddAll(Table* from, Table* to);
 
 #endif // clox_table_h
