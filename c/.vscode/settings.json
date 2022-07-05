@@ -4,6 +4,8 @@
 	"C_Cpp.errorSquiggles": "Enabled",
 	"files.associations": {
 		"string": "c",
-		"iosfwd": "c"
+		"iosfwd": "c",
+		"common.h": "c",
+		"stddef.h": "c"
 	}
 }

@@ -31,12 +31,24 @@ typedef struct {
 	Precedence precedence;
 } ParseRule;
 
+typedef struct {
+	Token name;
+	int depth;
+} Local;
+
+typedef struct {
+	Local locals[UINT8_COUNT];
+	int localCount;
+	int scopeDepth;
+} Compiler;
+
 struct {
 	Token current;
 	Token previous;
 	bool hadError;
 	bool panicMode;
 } parser;
+Compiler* current = NULL;
 Chunk* compilingChunk;
 
 static Chunk* currentChunk() { return compilingChunk; }
@@ -207,6 +219,12 @@ static void grouping(bool canAssign) {
 
 static void emitConstant(Value value) {
 	emitBytes(OP_CONSTANT, makeConstant(value));
+}
+
+static void initCompiler(Compiler* compiler) {
+	compiler->localCount = 0;
+	compiler->scopeDepth = 0;
+	current = compiler;
 }
 
 static void number(bool canAssign) {
@@ -390,6 +408,8 @@ bool compile(const char* source, Chunk* chunk) {
 	initScanner(source);
 	parser.hadError = false;
 	parser.panicMode = false;
+	Compiler compiler;
+	initCompiler(&compiler);
 	compilingChunk = chunk;
 
 	advance();
