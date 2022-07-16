@@ -1,0 +1,12 @@
+fun first() {
+	second();
+	var b = 2;
+}
+
+fun second() {
+	var c = 3;
+	var d = 4;
+}
+
+first();
+
