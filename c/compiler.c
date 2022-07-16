@@ -152,13 +152,19 @@ static uint8_t makeConstant(Value value) {
 	return (uint8_t)constant;
 }
 
-static void endCompiler() {
+static ObjFunction* endCompiler() {
 	emitReturn();
+	ObjFunction* function = current->function;
+
 #ifdef DEBUG_PRINT_CODE
 	if (!parser.hadError) {
-		disassembleChunk(currentChunk(), "code");
+		disassembleChunk(currentChunk(), function->name != NULL
+																				 ? function->name->chars
+																				 : "<script>");
 	}
 #endif // DEBUG_PRINT_CODE
+
+	return function;
 }
 
 static void beginScope() { current->scopeDepth++; }
@@ -340,10 +346,19 @@ static void patchJump(int offset) {
 	chunk->code[offset + 1] = jump & 0xFF;
 }
 
-static void initCompiler(Compiler* compiler) {
+static void initCompiler(Compiler* compiler, FunctionType type) {
+	// init to null first to prevent GC shenanigans
+	compiler->function = NULL;
+	compiler->type = type;
 	compiler->localCount = 0;
 	compiler->scopeDepth = 0;
+	compiler->function = newFunction();
 	current = compiler;
+
+	Local* local = &current->locals[current->localCount++];
+	local->depth = 0;
+	local->name.start = "";
+	local->name.length = 0;
 }
 
 static void number(bool canAssign) {
@@ -638,19 +653,18 @@ static void statement() {
 	}
 }
 
-bool compile(const char* source, Chunk* chunk) {
+ObjFunction* compile(const char* source) {
 	initScanner(source);
+	Compiler compiler;
+	initCompiler(&compiler, TYPE_SCRIPT);
 	parser.hadError = false;
 	parser.panicMode = false;
-	Compiler compiler;
-	initCompiler(&compiler);
-	compilingChunk = chunk;
 
 	advance();
 	while (!match(TOKEN_EOF)) {
 		declaration();
 	}
 
-	endCompiler();
-	return !parser.hadError;
+	ObjFunction* function = endCompiler();
+	return parser.hadError ? NULL : function;
 }

@@ -9,6 +9,10 @@
 		"stddef.h": "c",
 		"__config": "c",
 		"__threading_support": "c",
-		"compiler.h": "c"
+		"compiler.h": "c",
+		"__availability": "c",
+		"iterator": "c",
+		"memory": "c",
+		"complex": "c"
 	}
 }
