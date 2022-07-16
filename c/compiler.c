@@ -518,8 +518,18 @@ static void forStatement() {
 		exitJump = emitJump(OP_JUMP_IF_FALSE);
 		emitByte(OP_POP); // Condition.
 	}
-	consume(TOKEN_RIGHT_PAREN, "Expect ')' after 'for' clauses.");
 
+	if (!match(TOKEN_RIGHT_PAREN)) {
+		int bodyJump = emitJump(OP_JUMP);
+		int incrementStart = currentChunk()->count;
+		expression();
+		emitByte(OP_POP);
+		consume(TOKEN_RIGHT_PAREN, "Expect ')' after for clauses");
+
+		emitLoop(loopStart);
+		loopStart = incrementStart;
+		patchJump(bodyJump);
+	}
 	statement();
 	emitLoop(loopStart);
 	if (exitJump != -1) {
