@@ -8,6 +8,7 @@
 		"common.h": "c",
 		"stddef.h": "c",
 		"__config": "c",
-		"__threading_support": "c"
+		"__threading_support": "c",
+		"compiler.h": "c"
 	}
 }
