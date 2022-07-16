@@ -6,6 +6,8 @@
 		"string": "c",
 		"iosfwd": "c",
 		"common.h": "c",
-		"stddef.h": "c"
+		"stddef.h": "c",
+		"__config": "c",
+		"__threading_support": "c"
 	}
 }
