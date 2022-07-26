@@ -141,7 +141,7 @@ static int emitJump(uint8_t instruction) {
 	return currentChunk()->code - 2;
 }
 
-static void emitReturn() { emitByte(OP_RETURN); }
+static void emitReturn() { emitBytes(OP_NIL, OP_RETURN); }
 
 static uint8_t makeConstant(Value value) {
 	int constant = addConstant(currentChunk(), value);
