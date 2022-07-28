@@ -245,6 +245,11 @@ static int resolveUpvalue(Compiler* compiler, Token* name) {
 		return addUpvalue(compiler, (uint8_t)local, true);
 	}
 
+	int upvalue = resolveUpvalue(compiler->enclosing, name);
+	if (upvalue != -1) {
+		return addUpvalue(compiler, (uint8_t)upvalue, false);
+	}
+
 	return -1;
 }
 
@@ -593,6 +598,10 @@ static void function(FunctionType type) {
 
 	ObjFunction* function = endCompiler();
 	emitBytes(OP_CLOSURE, makeConstant(OBJ_VAL(function)));
+	for (int ii = 0; ii < function->upvalueCount; ii++) {
+		emitBytes(compiler.upvalues[ii].isLocal ? 1 : 0,
+							compiler.upvalues[ii].index);
+	}
 }
 
 static void funDeclaration() {
