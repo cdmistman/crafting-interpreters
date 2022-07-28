@@ -14,6 +14,7 @@
 		"iterator": "c",
 		"memory": "c",
 		"complex": "c",
-		"ios": "c"
+		"ios": "c",
+		"object.h": "c"
 	}
 }
