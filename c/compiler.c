@@ -37,6 +37,11 @@ typedef struct {
 	int depth;
 } Local;
 
+typedef struct {
+	uint8_t index;
+	bool isLocal;
+} Upvalue;
+
 typedef enum { TYPE_FUNCTION, TYPE_SCRIPT } FunctionType;
 
 typedef struct Compiler {
@@ -47,6 +52,7 @@ typedef struct Compiler {
 
 	Local locals[UINT8_COUNT];
 	int localCount;
+	Upvalue upvalues[UINT8_COUNT];
 	int scopeDepth;
 } Compiler;
 
@@ -206,6 +212,37 @@ static int resolveLocal(Compiler* compiler, Token* name) {
 			}
 			return ii;
 		}
+	}
+
+	return -1;
+}
+
+static int addUpvalue(Compiler* compiler, uint8_t index, bool isLocal) {
+	int upvalueCount = compiler->function->upvalueCount;
+	for (int ii = 0; ii < upvalueCount; ii++) {
+		Upvalue* upvalue = &compiler->upvalues[ii];
+		if (upvalue->index == index && upvalue->isLocal == isLocal) {
+			return ii;
+		}
+	}
+
+	if (upvalueCount == UINT8_COUNT) {
+		error("Too many closure variables in function.");
+		return 0;
+	}
+
+	compiler->upvalues[upvalueCount].isLocal = isLocal;
+	compiler->upvalues[upvalueCount].index = index;
+	return compiler->function->upvalueCount++;
+}
+
+static int resolveUpvalue(Compiler* compiler, Token* name) {
+	if (compiler->enclosing == NULL)
+		return -1;
+
+	int local = resolveLocal(compiler->enclosing, name);
+	if (local != -1) {
+		return addUpvalue(compiler, (uint8_t)local, true);
 	}
 
 	return -1;
@@ -420,6 +457,9 @@ static void namedVariable(Token name, bool canAssign) {
 	if (arg != -1) {
 		getOp = OP_GET_LOCAL;
 		setOp = OP_SET_LOCAL;
+	} else if ((arg = resolveUpvalue(current, &name)) != -1) {
+		getOp = OP_GET_UPVALUE;
+		setOp = OP_SET_UPVALUE;
 	} else {
 		arg = identifierConstant(&name);
 		getOp = OP_GET_GLOBAL;
