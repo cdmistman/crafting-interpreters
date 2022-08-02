@@ -5,6 +5,12 @@
 #include "vm.h"
 
 void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
+	if (newSize > oldSize) {
+#ifdef DEBUG_STRESS_GC
+		collectGarbage();
+#endif // DEBUG_STRESS_GC
+	}
+
 	if (newSize == 0) {
 		free(pointer);
 		return NULL;
@@ -44,6 +50,8 @@ static void freeObject(Obj* object) {
 			break;
 	}
 }
+
+void collectGarbage() {}
 
 void freeObjects() {
 	Obj* object = vm.objects;
