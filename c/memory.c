@@ -37,6 +37,17 @@ void markObject(Obj* object) {
 	printf("\n");
 #endif // DEBUG_LOG_GC
 	object->isMarked = true;
+	if (vm.grayCapacity < vm.grayCount + 1) {
+		vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
+		vm.grayStack = (Obj**)realloc(vm.grayStack, sizeof(Obj*) * vm.grayCapacity);
+		// better solution would be to have "rainy day fund" of memory that
+		// allocates at the beginning. if this allocation doesn't succeed, use the
+		// rainy day fund instead
+		if (vm.grayStack == NULL)
+			exit(1);
+	}
+
+	vm.grayStack[vm.grayCount++] = object;
 }
 
 void markValue(Value value) {
@@ -111,4 +122,5 @@ void freeObjects() {
 		freeObject(object);
 		object = next;
 	}
+	free(vm.grayStack);
 }
