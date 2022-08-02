@@ -19,7 +19,7 @@ impl<'source> Scanner<'source> {
 		}
 	}
 
-	pub fn scan_token(&mut self) -> Token {
+	pub fn scan_token<'token: 'source>(&mut self) -> Token<'token> {
 		self.skip_whitespace();
 		self.start = self.current;
 
@@ -47,26 +47,26 @@ impl<'source> Scanner<'source> {
 			'/' => self.make_token(TokenKind::Slash),
 			'*' => self.make_token(TokenKind::Star),
 
-			'!' => self.consume_match('=', |scanner| {
-				scanner.make_token(TokenKind::BangEqual)
-			}).unwrap_or_else(|| {
-				self.make_token(TokenKind::Bang)
-			}),
-			'=' => self.consume_match('=', |scanner| {
-				scanner.make_token(TokenKind::EqualEqual)
-			}).unwrap_or_else(|| {
-				self.make_token(TokenKind::Equal)
-			}),
-			'<' => self.consume_match('=', |scanner| {
-				scanner.make_token(TokenKind::LessEqual)
-			}).unwrap_or_else(|| {
-				self.make_token(TokenKind::Less)
-			}),
-			'>' => self.consume_match('=', |scanner| {
-				scanner.make_token(TokenKind::GreaterEqual)
-			}).unwrap_or_else(|| {
-				self.make_token(TokenKind::Greater)
-			}),
+			'!' => self
+				.match_tok('=', |scanner| {
+					scanner.make_token(TokenKind::BangEqual)
+				})
+				.unwrap_or_else(|| self.make_token(TokenKind::Bang)),
+			'=' => self
+				.match_tok('=', |scanner| {
+					scanner.make_token(TokenKind::EqualEqual)
+				})
+				.unwrap_or_else(|| self.make_token(TokenKind::Equal)),
+			'<' => self
+				.match_tok('=', |scanner| {
+					scanner.make_token(TokenKind::LessEqual)
+				})
+				.unwrap_or_else(|| self.make_token(TokenKind::Less)),
+			'>' => self
+				.match_tok('=', |scanner| {
+					scanner.make_token(TokenKind::GreaterEqual)
+				})
+				.unwrap_or_else(|| self.make_token(TokenKind::Greater)),
 
 			_ => self.error_token("Unexpected character."),
 		}
@@ -74,11 +74,11 @@ impl<'source> Scanner<'source> {
 }
 
 impl<'source> Scanner<'source> {
-	fn error_token(&self, msg: &str) -> Token {
+	fn error_token<'token: 'source>(&self, msg: &str) -> Token<'token> {
 		todo!()
 	}
 
-	fn make_token(&self, kind: TokenKind) -> Token<'source> {
+	fn make_token<'token: 'source>(&self, kind: TokenKind) -> Token<'token> {
 		todo!()
 	}
 }
@@ -91,7 +91,7 @@ impl<'source> Scanner<'source> {
 		})
 	}
 
-	fn identifier(&mut self) -> Token {
+	fn identifier<'token: 'source>(&mut self) -> Token<'token> {
 		todo!()
 	}
 
@@ -99,14 +99,14 @@ impl<'source> Scanner<'source> {
 		self.current.len() == 0
 	}
 
-	fn consume_match<F, T>(&mut self, expect: char, eval: F) -> Option<T>
+	fn match_tok<F, T>(&mut self, expect: char, eval: F) -> Option<T>
 	where
 		F: FnOnce(&mut Self) -> T,
 	{
 		todo!()
 	}
 
-	fn number(&mut self) -> Token {
+	fn number<'token: 'source>(&mut self) -> Token<'token> {
 		todo!()
 	}
 
@@ -145,7 +145,7 @@ impl<'source> Scanner<'source> {
 		}
 	}
 
-	fn string(&mut self) -> Token {
+	fn string<'token: 'source>(&mut self) -> Token<'token> {
 		todo!()
 	}
 }

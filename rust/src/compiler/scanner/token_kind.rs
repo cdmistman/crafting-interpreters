@@ -1,3 +1,4 @@
+#[derive(Clone, Copy)]
 pub enum TokenKind {
 	// single character tokens
 	LParen,
