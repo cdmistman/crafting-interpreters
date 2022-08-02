@@ -128,6 +128,12 @@ static void freeObject(Obj* object) {
 			FREE(ObjFunction, object);
 			break;
 		}
+		case OBJ_INSTANCE: {
+			ObjInstance* instance = (ObjInstance*)object;
+			markObject((Obj*)instance->klass);
+			markTable(&instance->fields);
+			break;
+		}
 		case OBJ_NATIVE:
 			FREE(ObjNative, object);
 			break;
