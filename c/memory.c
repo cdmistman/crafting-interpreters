@@ -31,11 +31,15 @@ void* reallocate(void* pointer, size_t oldSize, size_t newSize) {
 void markObject(Obj* object) {
 	if (object == NULL)
 		return;
+	if (object->isMarked)
+		return;
+
 #ifdef DEBUG_LOG_GC
 	printf("%p mark ", (void*)object);
 	printValue(OBJ_VAL(object));
 	printf("\n");
 #endif // DEBUG_LOG_GC
+
 	object->isMarked = true;
 	if (vm.grayCapacity < vm.grayCount + 1) {
 		vm.grayCapacity = GROW_CAPACITY(vm.grayCapacity);
@@ -47,12 +51,52 @@ void markObject(Obj* object) {
 			exit(1);
 	}
 
+	// easy optimization: exclude native/string objects
+	// from the grayStack (can be marked "black" ASAP)
 	vm.grayStack[vm.grayCount++] = object;
 }
 
 void markValue(Value value) {
 	if (IS_OBJ(value))
 		markObject(AS_OBJ(value));
+}
+
+static void markArray(ValueArray* array) {
+	for (int ii = 0; ii < array->count; ii++) {
+		markValue(array->values[ii]);
+	}
+}
+
+static void blackenObject(Obj* object) {
+#ifdef DEBUG_LOG_GC
+	printf("%p blacken ", (void*)object);
+	printValue(OBJ_VAL(object));
+	printf("\n");
+#endif // DEBUG_LOG_GC
+
+	switch (object->type) {
+		case OBJ_CLOSURE: {
+			ObjClosure* closure = (ObjClosure*)object;
+			markObject((Obj*)closure->function);
+			for (int ii = 0; ii < closure->upvalueCount; ii++) {
+				markObject((Obj*)closure->upvalues[ii]);
+			}
+			break;
+		}
+		case OBJ_FUNCTION: {
+			ObjFunction* function = (ObjFunction*)object;
+			markObject((Obj*)function->name);
+			markArray(&function->chunk.constants);
+			break;
+		}
+		case OBJ_UPVALUE:
+			markValue(((ObjUpvalue*)object)->closed);
+			break;
+		case OBJ_NATIVE:
+		case OBJ_STRING:
+			// no outgoing references
+			break;
+	}
 }
 
 static void freeObject(Obj* object) {
@@ -103,12 +147,20 @@ static void markRoots() {
 	markCompilerRoots();
 }
 
+static void traceReferences() {
+	while (vm.grayCount > 0) {
+		Obj* object = vm.grayStack[--vm.grayCount];
+		blackenObject(object);
+	}
+}
+
 void collectGarbage() {
 #ifdef DEBUG_LOG_GC
 	printf("-- gc begin\n");
 #endif // DEBUG_LOG_GC
 
 	markRoots();
+	traceReferences();
 
 #ifdef DEBUG_LOG_GC
 	printf("-- gc end\n");
