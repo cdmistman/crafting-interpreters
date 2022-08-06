@@ -43,6 +43,6 @@ impl<'source, 'token: 'source> Parser<'source, 'token> {
 	}
 
 	pub fn error(&mut self, msg: &str) {
-		self.error_at(&self.current, msg)
+		self.error_at(&self.current.clone(), msg)
 	}
 }

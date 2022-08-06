@@ -1,4 +1,5 @@
 mod call_frame;
+mod run;
 
 use std::collections::HashMap;
 use std::mem::MaybeUninit;
@@ -20,14 +21,19 @@ pub struct Vm<const MAX_FRAMES: usize, const STACK_SIZE: usize> {
 	// pin to ensure the allocation doesn't change, since `stackTop` is
 	// self-referential. a lot of other pointers rely on the allocation
 	// not changing as well
-	stack:     Pin<Box<[MaybeUninit<u8>]>>,
-	stack_top: NonNull<MaybeUninit<u8>>,
+	stack:     Pin<Box<[MaybeUninit<Value>]>>,
+	stack_top: *const MaybeUninit<Value>,
 
 	globals: HashMap<ObjRef<ObjString>, Value>,
 	strings: HashMap<ObjRef<ObjString>, Value>,
 
 	open_upvalues: Vec<ObjRef<ObjUpvalue>>,
 	objects:       Vec<ObjRef<Obj>>,
+}
+
+pub enum Error {
+	Compilation,
+	Runtime,
 }
 
 impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
@@ -40,17 +46,22 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 	}
 
 	pub fn reset(&mut self) {
-		let ptr = self.stack.as_mut().as_mut_ptr();
-		unsafe {
-			self.stack_top = NonNull::new_unchecked(ptr);
-		}
+		self.stack_top = self.stack.as_mut().as_mut_ptr();
 	}
 
 	pub fn interpret(&mut self, src: &str) -> Result<(), InterpretError> {
 		todo!()
 	}
 
-	pub fn push(value: Value) {
+	pub fn peek(&self, index: usize) -> Value {
+		todo!()
+	}
+
+	pub fn pop(&mut self) -> Value {
+		todo!()
+	}
+
+	pub fn push(&mut self, value: Value) {
 		todo!()
 	}
 }
