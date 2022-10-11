@@ -52,7 +52,7 @@ pub struct ObjClosure {
 	obj:          Obj,
 	pub function: ObjRef<ObjFunction>,
 	// TODO: shouldn't be a `Vec`, should be some `GcVec` value
-	pub upvalues: Box<[ObjRef<ObjUpvalue>]>,
+	pub upvalues: ManuallyDrop<Vec<ObjRef<ObjUpvalue>>>,
 }
 
 #[repr(C)]

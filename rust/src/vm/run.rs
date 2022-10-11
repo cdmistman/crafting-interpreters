@@ -1,15 +1,19 @@
 use std::ops::Neg;
 
+use eyre::Result;
+
 use super::*;
 use crate::chunk::Bytecode;
+use crate::obj::ObjClass;
 use crate::obj::ObjClosure;
 use crate::obj::ObjFunction;
 use crate::obj::ObjInstance;
+use crate::obj::ObjNative;
 
 impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 	Vm<MAX_FRAMES, STACK_SIZE>
 {
-	fn run(&mut self) -> Result<(), ()> {
+	fn run(&mut self) -> Result<()> {
 		if cfg!(feature = "debug-trace") {
 			print!(" ");
 			for slot in self.stack.iter() {
@@ -29,8 +33,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 			match unsafe { bytecode.instr } {
 				Closure => {
 					let Some(function) = self.read_constant().as_obj::<ObjFunction>() else {
-						// TODO: report error. turns out this isn't handled in the book :)
-						return Err(());
+						return Err(eyre::eyre!("Only function objects can become a closure"));
 					};
 					let mut closure = ObjClosure::new(function);
 					self.push(closure.value());
@@ -62,10 +65,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				Call => {
 					let arg_count = self.read_byte();
 					let arg_count = unsafe { arg_count.index };
-					if !self.call_value(self.peek(arg_count as _), arg_count) {
-						// TODO: report error
-						return Err(());
-					}
+					self.call_value(self.peek(arg_count as _), arg_count)?;
 				},
 				Jump => {
 					let offset = self.read_short();
@@ -96,8 +96,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				GetGlobal => {
 					let name = self.read_string();
 					let Some(value) = self.globals.get(&name) else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Undefined variable '{name}'."));
 					};
 					self.push(*value)
 				},
@@ -106,8 +105,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					let value = self.peek(0);
 					if let None = self.globals.insert(name, value) {
 						self.globals.remove(&name);
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Undefined variable '{name}'."));
 					}
 				},
 				GetLocal => {
@@ -130,14 +128,12 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				},
 				GetProperty => {
 					let Some(instance) = self.peek(0).as_obj::<ObjInstance>() else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Only instances have properties."));
 					};
 					let name = self.read_string();
 
 					let Some(value) = instance.fields.get(&name) else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Undefined property '{name}'."));
 					};
 
 					self.pop(); // instance
@@ -155,8 +151,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				},
 				SetProperty => {
 					let Some(mut instance) = self.peek(1).as_obj::<ObjInstance>() else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Only instances have properties."));
 					};
 					let name = self.read_string();
 					let value = self.peek(0);
@@ -185,16 +180,14 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					} else if let Value::Number(_) = l && let Value::Number(_) = r {
 						self.binary_op(|a, b| Value::Number(a + b))
 					} else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Operands must be two numbers or two strings."));
 					}
 				},
 				Divide => self.binary_op(|a, b| Value::Number(a / b)),
 				Multiply => self.binary_op(|a, b| Value::Number(a * b)),
 				Negate => {
 					let Value::Number(val) = self.peek(0) else {
-						// TODO: report error
-						return Err(());
+						return Err(eyre!("Operand must be a number."));
 					};
 					self.pop();
 					self.push(Value::Number(val.neg()));
@@ -215,7 +208,13 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 
 // trait for restricting scoping of these methods
 trait RunUtil {
-	fn call_value(&mut self, callee: Value, arg_count: u8) -> bool;
+	fn call(
+		&mut self,
+		closure: ObjRef<ObjClosure>,
+		arg_count: u8,
+	) -> Result<()>;
+
+	fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()>;
 
 	fn capture_upvalues(
 		&mut self,
@@ -230,6 +229,8 @@ trait RunUtil {
 
 	fn frame_mut<'frame, 'vm: 'frame>(&'vm mut self) -> &'frame mut CallFrame;
 
+	fn new_instance(&mut self, klass: ObjRef<ObjClass>) -> ObjRef<ObjInstance>;
+
 	fn read_byte(&mut self) -> Bytecode;
 
 	fn read_constant(&mut self) -> Value;
@@ -237,13 +238,52 @@ trait RunUtil {
 	fn read_short(&mut self) -> u16;
 
 	fn read_string(&mut self) -> ObjRef<ObjString>;
+
+	unsafe fn stack_slice_from_top<'slice, 'me: 'slice>(
+		&'me self,
+		len: usize,
+	) -> &'slice [Value];
 }
 
 impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 	for Vm<MAX_FRAMES, STACK_SIZE>
 {
-	fn call_value(&mut self, callee: Value, arg_count: u8) -> bool {
+	fn call(
+		&mut self,
+		closure: ObjRef<ObjClosure>,
+		arg_count: u8,
+	) -> Result<()> {
 		todo!()
+	}
+
+	fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()> {
+		let Value::Obj(obj) = callee else {
+			return Err(eyre!("Can only call functions and classes."))
+		};
+
+		if let Ok(klass) = obj.try_cast::<ObjClass>() {
+			let instance_slot = self
+				.stack_top
+				.map_addr(|stack_top| stack_top - (arg_count as usize) - 1);
+			todo!()
+		} else if let Ok(closure) = obj.try_cast::<ObjClosure>() {
+			// self.call(closure, arg_count)
+			todo!()
+		} else if let Ok(function) = obj.try_cast::<ObjFunction>() {
+			// self.call(function, arg_count)
+			todo!()
+		} else if let Ok(native) = obj.try_cast::<ObjNative>() {
+			let arg_count = arg_count as usize;
+			let res = (native.function)(unsafe {
+				self.stack_slice_from_top(arg_count as _)
+			});
+			self.stack_top =
+				self.stack_top.map_addr(|stack_top| stack_top - arg_count);
+			self.push(res);
+			return Ok(());
+		} else {
+			Err(eyre!("Can only call functions and classes."))
+		}
 	}
 
 	fn capture_upvalues(
@@ -269,6 +309,10 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 		todo!()
 	}
 
+	fn new_instance(&mut self, klass: ObjRef<ObjClass>) -> ObjRef<ObjInstance> {
+		todo!()
+	}
+
 	fn read_byte(&mut self) -> Bytecode {
 		// let res = self.stack[]
 		todo!()
@@ -283,6 +327,13 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 	}
 
 	fn read_string(&mut self) -> ObjRef<ObjString> {
+		todo!()
+	}
+
+	unsafe fn stack_slice_from_top<'slice, 'me: 'slice>(
+		&'me self,
+		len: usize,
+	) -> &'slice [Value] {
 		todo!()
 	}
 }

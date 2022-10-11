@@ -2,5 +2,7 @@
 	"editor.formatOnSave": true,
 	"java.configuration.updateBuildConfiguration": "automatic",
 	"gradle.nestedProjects": true,
-	"java.import.gradle.wrapper.enabled": true
+	"java.import.gradle.wrapper.enabled": true,
+	"cmake.sourceDirectory": "${workspaceFolder}/c",
+	"cmake.buildDirectory": "${workspaceFolder}/c/build"
 }

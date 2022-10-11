@@ -31,11 +31,6 @@ pub struct Vm<const MAX_FRAMES: usize, const STACK_SIZE: usize> {
 	objects:       Vec<ObjRef<Obj>>,
 }
 
-pub enum Error {
-	Compilation,
-	Runtime,
-}
-
 impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 	Vm<MAX_FRAMES, STACK_SIZE>
 {
@@ -80,6 +75,6 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> Default
 }
 
 pub enum InterpretError {
-	CompileError(),
-	RuntimeError,
+	CompileError(eyre::ErrReport),
+	RuntimeError(eyre::ErrReport),
 }
