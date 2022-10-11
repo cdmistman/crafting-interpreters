@@ -364,26 +364,30 @@ static InterpretResult run() {
 				printValue(pop());
 				printf("\n");
 				break;
-			case OP_JUMP:
+			case OP_JUMP: {
 				uint16_t offset = READ_SHORT();
 				frame->ip += offset;
 				break;
-			case OP_JUMP_IF_FALSE:
+			}
+			case OP_JUMP_IF_FALSE: {
 				uint16_t offset = READ_SHORT();
 				if (isFalsey(peek(0)))
 					frame->ip += offset;
 				break;
-			case OP_LOOP:
+			}
+			case OP_LOOP: {
 				uint16_t offset = READ_SHORT();
 				frame->ip -= offset;
 				break;
-			case OP_CALL:
+			}
+			case OP_CALL: {
 				int argCount = READ_BYTE();
 				if (!callValue(peek(argCount), argCount)) {
 					return INTERPRET_RUNTIME_ERROR;
 				}
 				frame = &vm.frames[vm.frameCount - 1];
 				break;
+			}
 			case OP_CLOSURE: {
 				ObjFunction* function = AS_FUNCTION(READ_CONSTANT());
 				ObjClosure* closure = newClosure(function);
@@ -403,7 +407,7 @@ static InterpretResult run() {
 				closeUpvalues(vm.stackTop - 1);
 				pop();
 				break;
-			case OP_RETURN:
+			case OP_RETURN: {
 				Value result = pop();
 				closeUpvalues(frame->slots);
 				vm.frameCount--;
@@ -416,6 +420,7 @@ static InterpretResult run() {
 				push(result);
 				frame = &vm.frames[vm.frameCount - 1];
 				break;
+			}
 			case OP_CLASS:
 				push(OBJ_VAL(newClass(READ_STRING())));
 				break;

@@ -300,6 +300,41 @@ static uint8_t parseVariable(const char* errorMessage) {
 	return identifierConstant(&parser.previous);
 }
 
+static void patchJump(int offset) {
+	// -2 to adjust for the bytecode for the jump offset itself.
+	Chunk* chunk = currentChunk();
+	int jump = chunk->count - offset - 2;
+
+	if (jump > UINT16_MAX) {
+		error("Too much code to jump over.");
+	}
+
+	chunk->code[offset] = (jump >> 8) & 0xFF;
+	chunk->code[offset + 1] = jump & 0xFF;
+}
+
+static void initCompiler(Compiler* compiler, FunctionType type) {
+	compiler->enclosing = current;
+	// init to null first to prevent GC shenanigans
+	compiler->function = NULL;
+	compiler->type = type;
+	compiler->localCount = 0;
+	compiler->scopeDepth = 0;
+	compiler->function = newFunction();
+	current = compiler;
+
+	if (type != TYPE_SCRIPT) {
+		current->function->name =
+				copyString(parser.previous.start, parser.previous.length);
+	}
+
+	Local* local = &current->locals[current->localCount++];
+	local->depth = 0;
+	local->isCaptured = false;
+	local->name.start = "";
+	local->name.length = 0;
+}
+
 static void markInitialized() {
 	if (current->scopeDepth == 0)
 		return;
@@ -419,41 +454,6 @@ static void grouping(bool canAssign) {
 
 static void emitConstant(Value value) {
 	emitBytes(OP_CONSTANT, makeConstant(value));
-}
-
-static void patchJump(int offset) {
-	// -2 to adjust for the bytecode for the jump offset itself.
-	Chunk* chunk = currentChunk();
-	int jump = chunk->count - offset - 2;
-
-	if (jump > UINT16_MAX) {
-		error("Too much code to jump over.");
-	}
-
-	chunk->code[offset] = (jump >> 8) & 0xFF;
-	chunk->code[offset + 1] = jump & 0xFF;
-}
-
-static void initCompiler(Compiler* compiler, FunctionType type) {
-	compiler->enclosing = current;
-	// init to null first to prevent GC shenanigans
-	compiler->function = NULL;
-	compiler->type = type;
-	compiler->localCount = 0;
-	compiler->scopeDepth = 0;
-	compiler->function = newFunction();
-	current = compiler;
-
-	if (type != TYPE_SCRIPT) {
-		current->function->name =
-				copyString(parser.previous.start, parser.previous.length);
-	}
-
-	Local* local = &current->locals[current->localCount++];
-	local->depth = 0;
-	local->isCaptured = false;
-	local->name.start = "";
-	local->name.length = 0;
 }
 
 static void number(bool canAssign) {
