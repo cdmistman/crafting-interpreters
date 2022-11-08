@@ -13,6 +13,12 @@ typedef enum {
 	VAL_OBJ,
 } ValueType;
 
+#ifdef NAN_BOXING
+
+typedef uint64_t Value;
+
+#else
+
 typedef struct {
 	ValueType type;
 	union {
@@ -33,6 +39,8 @@ typedef struct {
 #define NIL_VAL ((Value){VAL_NIL, {.number = 0}})
 #define NUMBER_VAL(value) ((Value){VAL_NUMBER, {.number = value}})
 #define OBJ_VAL(value) ((Value){VAL_OBJ, {.obj = (Obj*)value}})
+
+#endif
 
 typedef struct {
 	int capacity;
