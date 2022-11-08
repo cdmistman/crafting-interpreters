@@ -14,8 +14,25 @@ typedef enum {
 } ValueType;
 
 #ifdef NAN_BOXING
+#define QNAN ((uint64_t)0x7FFC000000000000)
 
 typedef uint64_t Value;
+
+#define IS_NUMBER(value) (((value)&QNAN) != QNAN)
+#define AS_NUMBER(value) valueToNum(value)
+#define NUMBER_VAL(num) numToValue(num)
+
+static inline double valueToNum(Value value) {
+	double num;
+	memcpy(&num, &value, sizeof(Value));
+	return num;
+}
+
+static inline Value numToValue(double num) {
+	Value value;
+	memcpy(&value, &num, sizeof(double));
+	return value;
+}
 
 #else
 
