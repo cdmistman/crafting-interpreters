@@ -641,6 +641,7 @@ static void parsePrecedence(Precedence precedence) {
 
 	bool canAssign = precedence <= PREC_ASSIGNMENT;
 	prefixRule(canAssign);
+
 	while (precedence <= getRule(parser.current.type)->precedence) {
 		advance();
 		ParseFn infixRule = getRule(parser.previous.type)->infix;
@@ -863,7 +864,7 @@ static void whileStatement() {
 
 	consume(TOKEN_LEFT_PAREN, "Expect '(' after 'while'.");
 	expression();
-	consume(TOKEN_LEFT_PAREN, "Expect ')' after condition.");
+	consume(TOKEN_RIGHT_PAREN, "Expect ')' after condition.");
 
 	int exitJump = emitJump(OP_JUMP_IF_FALSE);
 	emitByte(OP_POP);
