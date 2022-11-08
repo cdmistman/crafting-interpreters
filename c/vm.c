@@ -157,7 +157,6 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
 
 static bool invoke(ObjString* name, int argCount) {
 	Value receiver = peek(argCount);
-	printf("invoking on receiver of type %ld\n", receiver.type);
 	if (!IS_INSTANCE(receiver)) {
 		runtimeError("Only instances have methods.");
 		return false;
