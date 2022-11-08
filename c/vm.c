@@ -65,7 +65,7 @@ void initVM() {
 
 	vm.initString = NULL;
 	vm.initString = copyString("init", 4);
-    
+
 	defineNative("clock", clockNative);
 }
 
@@ -125,7 +125,7 @@ static bool callValue(Value callee, int argCount) {
 					runtimeError("Expected 0 arguments but got %d.", argCount);
 					return false;
 				}
-                return true;
+				return true;
 			}
 			case OBJ_CLOSURE:
 				return call(AS_CLOSURE(callee), argCount);
@@ -157,7 +157,7 @@ static bool invokeFromClass(ObjClass* klass, ObjString* name, int argCount) {
 
 static bool invoke(ObjString* name, int argCount) {
 	Value receiver = peek(argCount);
-    printf("invoking on receiver of type %ld\n", receiver.type);
+	printf("invoking on receiver of type %ld\n", receiver.type);
 	if (!IS_INSTANCE(receiver)) {
 		runtimeError("Only instances have methods.");
 		return false;
@@ -258,13 +258,13 @@ static InterpretResult run() {
 
 #define READ_STRING() AS_STRING(READ_CONSTANT())
 
-#define BINARY_OP(valueType, op)                                                   \
-	do {                                                                           \
+#define BINARY_OP(valueType, op)                                               \
+	do {                                                                         \
 		if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
-			runtimeError("Operands must be numbers.");                             \
-            printf(" - arg 0 is %ld\n", peek(0).type);                             \
-            printf(" - arg 1 is %ld\n", peek(1).type);                             \
-			return INTERPRET_RUNTIME_ERROR;                                        \
+			runtimeError("Operands must be numbers.");                               \
+			printf(" - arg 0 is %ld\n", peek(0).type);                               \
+			printf(" - arg 1 is %ld\n", peek(1).type);                               \
+			return INTERPRET_RUNTIME_ERROR;                                          \
 		}                                                                          \
 		double b = AS_NUMBER(pop());                                               \
 		double a = AS_NUMBER(pop());                                               \
