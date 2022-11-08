@@ -158,7 +158,7 @@ static void emitLoop(int loopStart) {
 static int emitJump(uint8_t instruction) {
 	emitByte(instruction);
 	emitBytes(0xFF, 0xFF);
-	return currentChunk()->code - 2;
+	return currentChunk()->count - 2;
 }
 
 static void emitReturn() {
