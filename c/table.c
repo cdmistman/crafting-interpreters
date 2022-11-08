@@ -9,7 +9,7 @@
 #define TABLE_MAX_LOAD 0.75
 
 static Entry* findEntry(Entry* entries, int capacity, ObjString* key) {
-	uint32_t index = key->hash & capacity;
+	uint32_t index = key->hash % capacity;
 	Entry* tombstone = NULL;
 
 	for (;;) {

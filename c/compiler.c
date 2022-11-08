@@ -168,7 +168,7 @@ static void emitReturn() {
 		emitByte(OP_NIL);
 	}
 
-	emitBytes(OP_NIL, OP_RETURN);
+	emitByte(OP_RETURN);
 }
 
 static uint8_t makeConstant(Value value) {
@@ -408,16 +408,19 @@ static void binary(bool canAssign) {
 	switch (operatorType) {
 		case TOKEN_EQUAL_EQUAL:
 			emitByte(OP_EQUAL);
+            break;
 		case TOKEN_BANG_EQUAL:
 			emitBytes(OP_EQUAL, OP_NOT);
 			break;
 		case TOKEN_GREATER:
 			emitByte(OP_GREATER);
+            break;
 		case TOKEN_GREATER_EQUAL:
 			emitBytes(OP_LESS, OP_NOT);
 			break;
 		case TOKEN_LESS:
 			emitByte(OP_LESS);
+            break;
 		case TOKEN_LESS_EQUAL:
 			emitBytes(OP_GREATER, OP_NOT);
 			break;
