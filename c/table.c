@@ -9,7 +9,8 @@
 #define TABLE_MAX_LOAD 0.75
 
 static Entry* findEntry(Entry* entries, int capacity, ObjString* key) {
-	uint32_t index = key->hash % capacity;
+	int capacityMask = capacity - 1;
+	uint32_t index = key->hash & capacityMask;
 	Entry* tombstone = NULL;
 
 	for (;;) {
@@ -27,7 +28,7 @@ static Entry* findEntry(Entry* entries, int capacity, ObjString* key) {
 			// we found the key
 			return entry;
 		}
-		index = (index + 1) % capacity;
+		index = (index + 1) & capacityMask;
 	}
 }
 
@@ -122,7 +123,8 @@ ObjString* tableFindString(Table* table, const char* chars, int length,
 	if (table->count == 0)
 		return NULL;
 
-	uint32_t index = hash % table->capacity;
+	int capacityMask = table->capacity - 1;
+	uint32_t index = hash & capacityMask;
 	for (;;) {
 		Entry* entry = &table->entries[index];
 		if (entry->key == NULL) {
@@ -135,7 +137,7 @@ ObjString* tableFindString(Table* table, const char* chars, int length,
 			return entry->key;
 		}
 
-		index = (index + 1) % table->capacity;
+		index = (index + 1) & capacityMask;
 	}
 }
 
