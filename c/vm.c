@@ -261,8 +261,6 @@ static InterpretResult run() {
 	do {                                                                         \
 		if (!IS_NUMBER(peek(0)) || !IS_NUMBER(peek(1))) {                          \
 			runtimeError("Operands must be numbers.");                               \
-			printf(" - arg 0 is %ld\n", peek(0).type);                               \
-			printf(" - arg 1 is %ld\n", peek(1).type);                               \
 			return INTERPRET_RUNTIME_ERROR;                                          \
 		}                                                                          \
 		double b = AS_NUMBER(pop());                                               \
