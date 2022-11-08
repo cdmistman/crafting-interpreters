@@ -65,6 +65,7 @@ typedef struct Compiler {
 
 typedef struct ClassCompiler {
 	struct ClassCompiler* enclosing;
+	bool hasSuperclass;
 } ClassCompiler;
 
 struct {
@@ -527,6 +528,13 @@ static void namedVariable(Token name, bool canAssign) {
 	}
 }
 
+static Token syntheticToken(const char* text) {
+	Token token;
+	token.start = text;
+	token.length = (int)strlen(text);
+	return token;
+}
+
 static void variable(bool canAssign) {
 	namedVariable(parser.previous, canAssign);
 }
@@ -685,6 +693,7 @@ static void classDeclaration() {
 	defineVariable(nameConstant);
 
 	ClassCompiler classCompiler;
+	classCompiler.hasSuperclass = false;
 	classCompiler.enclosing = currentClass;
 	currentClass = &classCompiler;
 
@@ -695,8 +704,13 @@ static void classDeclaration() {
 			error("A class can't inherit from itself.");
 		}
 
+		beginScope();
+		addLocal(syntheticToken("super"));
+		defineVariable(0);
+
 		namedVariable(className, false);
 		emitByte(OP_INHERIT);
+		classCompiler.hasSuperclass = true;
 	}
 
 	namedVariable(className, false);
@@ -706,6 +720,9 @@ static void classDeclaration() {
 	}
 	consume(TOKEN_RIGHT_BRACE, "Expect '}' after class body.");
 	emitByte(OP_POP);
+	if (classCompiler.hasSuperclass) {
+		endScope();
+	}
 	currentClass = currentClass->enclosing;
 }
 
