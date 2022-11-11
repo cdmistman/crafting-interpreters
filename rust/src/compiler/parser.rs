@@ -1,20 +1,19 @@
-use std::borrow::Cow;
 use std::cell::RefCell;
 
 use super::scanner::Scanner;
 use super::scanner::Token;
 use super::scanner::TokenKind;
 
-pub struct Parser<'source, 'token: 'source> {
+pub struct Parser<'source> {
 	pub scanner: RefCell<Scanner<'source>>,
 
-	pub current:    Token<'token>,
-	pub previous:   Option<Token<'token>>,
+	pub current:    Token<'source>,
+	pub previous:   Option<Token<'source>>,
 	pub had_error:  bool,
 	pub panic_mode: bool,
 }
 
-impl<'source, 'token: 'source> Parser<'source, 'token> {
+impl<'source> Parser<'source> {
 	pub fn new(source: &'source str) -> Self {
 		let mut scanner = RefCell::new(Scanner::new(source));
 		let current = scanner.get_mut().scan_token();
@@ -27,7 +26,7 @@ impl<'source, 'token: 'source> Parser<'source, 'token> {
 		}
 	}
 
-	pub fn error_at(&mut self, tok: &Token<'token>, msg: &str) {
+	pub fn error_at(&mut self, tok: &Token<'source>, msg: &str) {
 		if self.panic_mode {
 			return;
 		}
@@ -37,7 +36,7 @@ impl<'source, 'token: 'source> Parser<'source, 'token> {
 		match tok.kind {
 			TokenKind::Eof => eprint!(" at end"),
 			TokenKind::Error => (),
-			_ => eprint!(" at {}", tok.start),
+			_ => eprint!(" at {}", tok.text),
 		}
 
 		eprint!(": {msg}");
