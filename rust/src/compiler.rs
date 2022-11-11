@@ -1,12 +1,14 @@
 mod parser;
 mod scanner;
+mod token;
+mod token_kind;
 
 use std::rc::Rc;
 
 use eyre::Result;
 
 use self::parser::Parser;
-use self::scanner::Token;
+use self::token::Token;
 use crate::mem::GcRef;
 use crate::mem::InlineVec;
 use crate::obj::ObjFunction;

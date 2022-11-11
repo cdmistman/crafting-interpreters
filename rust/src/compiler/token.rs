@@ -1,4 +1,4 @@
-use super::TokenKind;
+use super::token_kind::TokenKind;
 
 #[derive(Clone, Copy)]
 pub struct Token<'source> {

@@ -1,8 +1,5 @@
-mod token;
-mod token_kind;
-
-pub use token::*;
-pub use token_kind::*;
+pub use super::token::*;
+pub use super::token_kind::*;
 
 pub struct Scanner<'source> {
 	start:   &'source str,
