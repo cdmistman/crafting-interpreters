@@ -4,6 +4,7 @@ use eyre::Result;
 
 use super::*;
 use crate::chunk::Bytecode;
+use crate::mem::GcRef;
 use crate::obj::ObjClass;
 use crate::obj::ObjClosure;
 use crate::obj::ObjFunction;
@@ -15,24 +16,23 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 {
 	fn run(&mut self) -> Result<()> {
 		if cfg!(feature = "debug-trace") {
-			print!(" ");
-			for slot in self.stack.iter() {
-				if slot as *const _ >= self.stack_top {
-					break;
-				}
-				print!(" [{}] ", unsafe { slot.assume_init_ref() });
-			}
+			let mut slots = self.stack.iter();
+			slots.next().map(|slot| print!("[ {slot} ]"));
+			slots.for_each(|slot| print!(" [ {slot} ]"));
 			println!();
 			// TODO: disassembleInstruction
 		}
 
 		loop {
-			use crate::chunk::Instr::*;
+			use crate::chunk::Op::*;
 
 			let bytecode = self.read_byte();
 			match unsafe { bytecode.instr } {
 				Closure => {
-					let Some(function) = self.read_constant().as_obj::<ObjFunction>() else {
+					let Some(function) = self
+						.read_constant()
+						.as_casted_obj::<ObjFunction>()
+					else {
 						return Err(eyre::eyre!("Only function objects can become a closure"));
 					};
 					let mut closure = ObjClosure::new(function);
@@ -59,7 +59,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					self.push(constant)
 				},
 				False => self.push(Value::Bool(false)),
-				Nil => self.push(Value::Nil),
+				Nil => self.push(Value::Nil()),
 				True => self.push(Value::Bool(true)),
 
 				Call => {
@@ -127,7 +127,10 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					slot.write(value);
 				},
 				GetProperty => {
-					let Some(instance) = self.peek(0).as_obj::<ObjInstance>() else {
+					let Some(instance) = self
+						.peek(0)
+						.as_casted_obj::<ObjInstance>()
+					else {
 						return Err(eyre!("Only instances have properties."));
 					};
 					let name = self.read_string();
@@ -139,9 +142,9 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					self.pop(); // instance
 					self.push(*value);
 				},
-				CloseUpvalue => self.close_upvalues(
-					self.stack_top.map_addr(|addr| addr - 1).cast(),
-				),
+				CloseUpvalue => {
+					self.close_upvalues(&self.stack[self.stack.len() - 1] as _)
+				},
 				GetUpvalue => {
 					let slot = self.read_byte();
 					let slot = unsafe { slot.index };
@@ -150,7 +153,10 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					self.push(unsafe { value.as_ref() }.clone());
 				},
 				SetProperty => {
-					let Some(mut instance) = self.peek(1).as_obj::<ObjInstance>() else {
+					let Some(mut instance) = self
+						.peek(1)
+						.as_casted_obj::<ObjInstance>()
+					else {
 						return Err(eyre!("Only instances have properties."));
 					};
 					let name = self.read_string();
@@ -173,11 +179,12 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				Add => {
 					let l = self.peek(0);
 					let r = self.peek(1);
-					if let Some(a) = l.as_obj::<ObjString>()
-						&& let Some(b) = r.as_obj::<ObjString>()
+					if let Some(a) = l.as_casted_obj::<ObjString>()
+						&& let Some(b) = r.as_casted_obj::<ObjString>()
 					{
-						self.push(ObjString::concat(a, b).value());
-					} else if let Value::Number(_) = l && let Value::Number(_) = r {
+						let string = ObjString::concat(a, b);
+						self.push(string.value());
+					} else if l.is_number() && r.is_number() {
 						self.binary_op(|a, b| Value::Number(a + b))
 					} else {
 						return Err(eyre!("Operands must be two numbers or two strings."));
@@ -186,7 +193,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				Divide => self.binary_op(|a, b| Value::Number(a / b)),
 				Multiply => self.binary_op(|a, b| Value::Number(a * b)),
 				Negate => {
-					let Value::Number(val) = self.peek(0) else {
+					let Some(val) = self.peek(0).as_number() else {
 						return Err(eyre!("Operand must be a number."));
 					};
 					self.pop();
@@ -208,18 +215,13 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 
 // trait for restricting scoping of these methods
 trait RunUtil {
-	fn call(
-		&mut self,
-		closure: ObjRef<ObjClosure>,
-		arg_count: u8,
-	) -> Result<()>;
+	fn call(&mut self, closure: GcRef<ObjClosure>, arg_count: u8)
+		-> Result<()>;
 
 	fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()>;
 
-	fn capture_upvalues(
-		&mut self,
-		values: NonNull<Value>,
-	) -> ObjRef<ObjUpvalue>;
+	fn capture_upvalues(&mut self, values: NonNull<Value>)
+		-> GcRef<ObjUpvalue>;
 
 	fn binary_op(&mut self, op: impl FnOnce(f64, f64) -> Value);
 
@@ -229,7 +231,7 @@ trait RunUtil {
 
 	fn frame_mut<'frame, 'vm: 'frame>(&'vm mut self) -> &'frame mut CallFrame;
 
-	fn new_instance(&mut self, klass: ObjRef<ObjClass>) -> ObjRef<ObjInstance>;
+	fn new_instance(&mut self, klass: GcRef<ObjClass>) -> GcRef<ObjInstance>;
 
 	fn read_byte(&mut self) -> Bytecode;
 
@@ -237,7 +239,7 @@ trait RunUtil {
 
 	fn read_short(&mut self) -> u16;
 
-	fn read_string(&mut self) -> ObjRef<ObjString>;
+	fn read_string(&mut self) -> GcRef<ObjString>;
 
 	unsafe fn stack_slice_from_top<'slice, 'me: 'slice>(
 		&'me self,
@@ -250,35 +252,33 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 {
 	fn call(
 		&mut self,
-		closure: ObjRef<ObjClosure>,
+		closure: GcRef<ObjClosure>,
 		arg_count: u8,
 	) -> Result<()> {
 		todo!()
 	}
 
 	fn call_value(&mut self, callee: Value, arg_count: u8) -> Result<()> {
-		let Value::Obj(obj) = callee else {
+		let Some(obj) = callee.as_obj() else {
 			return Err(eyre!("Can only call functions and classes."))
 		};
 
-		if let Ok(klass) = obj.try_cast::<ObjClass>() {
-			let instance_slot = self
-				.stack_top
-				.map_addr(|stack_top| stack_top - (arg_count as usize) - 1);
+		if let Some(klass) = obj.try_cast::<ObjClass>() {
+			let instance_slot =
+				&self.stack[self.stack.len() - (arg_count as usize) - 1];
 			todo!()
-		} else if let Ok(closure) = obj.try_cast::<ObjClosure>() {
+		} else if let Some(closure) = obj.try_cast::<ObjClosure>() {
 			// self.call(closure, arg_count)
 			todo!()
-		} else if let Ok(function) = obj.try_cast::<ObjFunction>() {
+		} else if let Some(function) = obj.try_cast::<ObjFunction>() {
 			// self.call(function, arg_count)
 			todo!()
-		} else if let Ok(native) = obj.try_cast::<ObjNative>() {
+		} else if let Some(native) = obj.try_cast::<ObjNative>() {
 			let arg_count = arg_count as usize;
 			let res = (native.function)(unsafe {
 				self.stack_slice_from_top(arg_count as _)
 			});
-			self.stack_top =
-				self.stack_top.map_addr(|stack_top| stack_top - arg_count);
+			self.stack.pop_n(arg_count);
 			self.push(res);
 			return Ok(());
 		} else {
@@ -289,7 +289,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 	fn capture_upvalues(
 		&mut self,
 		values: NonNull<Value>,
-	) -> ObjRef<ObjUpvalue> {
+	) -> GcRef<ObjUpvalue> {
 		todo!()
 	}
 
@@ -302,14 +302,14 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 	}
 
 	fn frame<'frame, 'vm: 'frame>(&'vm self) -> &'frame CallFrame {
-		&self.frames[self.frame_count - 1]
+		&self.frames[self.frames.len() - 1]
 	}
 
 	fn frame_mut<'frame, 'vm: 'frame>(&'vm mut self) -> &'frame mut CallFrame {
 		todo!()
 	}
 
-	fn new_instance(&mut self, klass: ObjRef<ObjClass>) -> ObjRef<ObjInstance> {
+	fn new_instance(&mut self, klass: GcRef<ObjClass>) -> GcRef<ObjInstance> {
 		todo!()
 	}
 
@@ -326,7 +326,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize> RunUtil
 		todo!()
 	}
 
-	fn read_string(&mut self) -> ObjRef<ObjString> {
+	fn read_string(&mut self) -> GcRef<ObjString> {
 		todo!()
 	}
 

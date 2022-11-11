@@ -1,11 +1,12 @@
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 use super::scanner::Scanner;
 use super::scanner::Token;
 use super::scanner::TokenKind;
 
 pub struct Parser<'source, 'token: 'source> {
-	pub scanner: Scanner<'source>,
+	pub scanner: RefCell<Scanner<'source>>,
 
 	pub current:    Token<'token>,
 	pub previous:   Option<Token<'token>>,
@@ -14,8 +15,9 @@ pub struct Parser<'source, 'token: 'source> {
 }
 
 impl<'source, 'token: 'source> Parser<'source, 'token> {
-	pub fn new(mut scanner: Scanner<'source>) -> Self {
-		let current = scanner.scan_token();
+	pub fn new(source: &'source str) -> Self {
+		let mut scanner = RefCell::new(Scanner::new(source));
+		let current = scanner.get_mut().scan_token();
 		Self {
 			scanner,
 			current,

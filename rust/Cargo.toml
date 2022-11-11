@@ -7,5 +7,13 @@ edition = "2021"
 debug-trace = []
 
 [dependencies]
+dashmap = "=5.4"
 eyre = "=0.6"
+fnv = "=1.0"
+hashbrown = "=0.13"
+lazy_static = "=1.4"
 paste = "=1.0"
+scoped-tls = "=1.0"
+
+[workspace]
+members = ["rewrite"]

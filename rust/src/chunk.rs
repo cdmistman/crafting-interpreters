@@ -1,14 +1,15 @@
+use crate::mem::GcVec;
 use crate::value::Value;
 
 pub union Bytecode {
-	pub instr: Instr,
+	pub instr: Op,
 	pub value: Value,
 	pub index: u8,
 }
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
-pub enum Instr {
+pub enum Op {
 	// raw value instructions
 	Class,
 	Closure,
@@ -56,14 +57,9 @@ pub enum Instr {
 	Print,
 }
 
+#[derive(Default)]
 pub struct Chunk {
-	pub bytecode:  Vec<Bytecode>,
-	pub lines:     Vec<u32>,
-	pub constants: Vec<Value>,
-}
-
-impl Default for Chunk {
-	fn default() -> Self {
-		todo!()
-	}
+	pub bytecode:  GcVec<Bytecode>,
+	pub lines:     GcVec<u32>,
+	pub constants: GcVec<Value>,
 }
