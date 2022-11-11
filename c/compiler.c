@@ -106,7 +106,7 @@ static void errorAtCurrent(const char* message) {
 }
 
 static void advance() {
-	parser.previous = parser.current&f;
+	parser.previous = parser.current;
 
 	for (;;) {
 		parser.current = scanToken();
