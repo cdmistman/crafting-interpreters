@@ -22,3 +22,5 @@ impl Display for ObjClosure {
 		self.function.fmt(f)
 	}
 }
+
+impl Trace for ObjClosure {}

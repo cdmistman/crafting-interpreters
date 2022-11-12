@@ -1,36 +1,52 @@
-use std::mem::ManuallyDrop;
 use std::mem::MaybeUninit;
 
 use super::*;
 
-pub struct GcVec<T>(ManuallyDrop<MaybeUninit<Box<Vec<T>>>>);
+pub struct GcVec<T: Trace> {
+	vec:    NonNull<Vec<T>>,
+	gc_tmp: NonNull<Option<T>>,
+}
 
-impl<T> Clone for GcVec<T> {
+impl<T: Trace> GcVec<T> {
+	pub fn push(&mut self, t: T) {
+		let t = MaybeUninit::new(t);
+		unsafe {
+			*self.gc_tmp.as_mut() = Some(t.assume_init_read());
+			self.vec.as_mut().push(t.assume_init_read());
+			self.gc_tmp.as_mut().take();
+		}
+	}
+}
+
+impl<T: Trace> Clone for GcVec<T> {
 	fn clone(&self) -> Self {
-		let mut boxed = MaybeUninit::uninit();
-		boxed.write(unsafe { self.0.assume_init_read() });
-		Self(ManuallyDrop::new(boxed))
+		Self {
+			vec:    self.vec,
+			gc_tmp: self.gc_tmp,
+		}
 	}
 }
 
-impl<T> Default for GcVec<T> {
+impl<T: Trace> Default for GcVec<T> {
 	fn default() -> Self {
-		Self(ManuallyDrop::new(MaybeUninit::new(Box::new(
-			Vec::with_capacity(8),
-		))))
+		let vec = Box::leak(Box::new(Vec::new())).into();
+		let gc_tmp = Box::leak(Box::new(None)).into();
+		Self { vec, gc_tmp }
 	}
 }
 
-impl<T> Deref for GcVec<T> {
+impl<T: Trace> Deref for GcVec<T> {
 	type Target = Vec<T>;
 
 	fn deref(&self) -> &Self::Target {
-		unsafe { self.0.assume_init_ref() }
+		unsafe { self.vec.as_ref() }
 	}
 }
 
-impl<T> DerefMut for GcVec<T> {
+impl<T: Trace> DerefMut for GcVec<T> {
 	fn deref_mut(&mut self) -> &mut Self::Target {
-		unsafe { self.0.assume_init_mut() }
+		unsafe { self.vec.as_mut() }
 	}
 }
+
+impl<T: Trace> Trace for GcVec<T> {}

@@ -44,7 +44,9 @@ pub enum ObjType {
 	Upvalue,
 }
 
-pub trait ObjTy: Deref<Target = Obj> + DerefMut + __sealed::Sealed {
+pub trait ObjTy:
+	Deref<Target = Obj> + DerefMut + __sealed::Sealed + Trace
+{
 	const OBJ_TYPE: ObjType;
 }
 

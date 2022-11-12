@@ -24,3 +24,5 @@ impl Display for ObjUpvalue {
 		"upvalue".fmt(f)
 	}
 }
+
+impl Trace for ObjUpvalue {}

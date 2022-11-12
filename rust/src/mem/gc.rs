@@ -4,13 +4,14 @@ use std::cell::RefCell;
 use dashmap::DashSet;
 
 use super::GcRef;
+use crate::obj::Obj;
 use crate::obj::ObjString;
 use crate::obj::ObjTy;
 
 scoped_tls::scoped_thread_local!(pub static GC: GarbageCollector);
 
 pub struct GarbageCollector {
-	objects: RefCell<Option<GcRef>>,
+	objects: RefCell<Option<GcRef<Obj>>>,
 	strings: DashSet<GcRef<ObjString>>,
 }
 
@@ -36,7 +37,7 @@ impl GarbageCollector {
 	pub fn new_object<Type: ObjTy>(&self) -> GcRef<Type> {
 		let alloc =
 			Box::leak(unsafe { Box::<Type>::new_zeroed().assume_init() });
-		let mut res = GcRef::new_raw(alloc.into());
+		let mut res = GcRef::new_raw(alloc);
 
 		res.ty = Type::OBJ_TYPE;
 		{

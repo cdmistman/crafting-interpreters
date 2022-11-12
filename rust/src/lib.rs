@@ -5,6 +5,7 @@
 #![feature(maybe_uninit_slice)]
 #![feature(new_uninit)]
 #![feature(nonnull_slice_from_raw_parts)]
+#![feature(result_option_inspect)]
 #![feature(strict_provenance)]
 #![feature(string_leak)]
 #![feature(trait_alias)]

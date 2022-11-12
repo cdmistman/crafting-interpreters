@@ -1,3 +1,7 @@
+use std::fmt::Write;
+
+use eyre::Result;
+
 use super::scanner::Scanner;
 use super::scanner::Token;
 use super::scanner::TokenKind;
@@ -5,10 +9,9 @@ use super::scanner::TokenKind;
 pub struct Parser<'source> {
 	pub scanner: Scanner<'source>,
 
-	pub current:    Token<'source>,
-	pub previous:   Option<Token<'source>>,
-	pub had_error:  bool,
-	pub panic_mode: bool,
+	pub current:   Token<'source>,
+	pub previous:  Option<Token<'source>>,
+	pub had_error: bool,
 }
 
 impl<'source> Parser<'source> {
@@ -20,7 +23,6 @@ impl<'source> Parser<'source> {
 			current,
 			previous: None,
 			had_error: false,
-			panic_mode: false,
 		}
 	}
 
@@ -49,39 +51,43 @@ impl<'source> Parser<'source> {
 		res
 	}
 
-	pub fn consume(&mut self, kind: TokenKind, msg: &str) {
+	pub fn consume(
+		&mut self,
+		kind: TokenKind,
+		msg: &str,
+	) -> Result<Token<'source>> {
 		if self.check(kind) {
+			let res = self.current;
 			self.advance();
+			Ok(res)
 		} else {
-			self.error_at_current(msg);
+			Err(self.error_at_current(msg))
 		}
 	}
 
-	pub fn error(&mut self, msg: &str) {
+	pub fn error(&mut self, msg: &str) -> eyre::Report {
 		let at = self
 			.previous
 			.expect("error for previous token but there is no previous token");
 		self.error_at(at, msg)
 	}
 
-	pub fn error_at(&mut self, tok: Token<'source>, msg: &str) {
-		if self.panic_mode {
-			return;
-		}
-		self.panic_mode = true;
-
-		eprint!("[line {}] Error", tok.line);
+	pub fn error_at(&mut self, tok: Token<'source>, msg: &str) -> eyre::Report {
+		let mut error = String::with_capacity(22 + msg.len());
+		write!(error, "[line {}] Error", tok.line);
 		match tok.kind {
-			TokenKind::Eof => eprint!(" at end"),
+			TokenKind::Eof => write!(error, " at end").unwrap(),
 			TokenKind::Error => (),
-			_ => eprint!(" at {}", tok.text),
+			_ => write!(error, " at {}", tok.text).unwrap(),
 		}
 
-		eprint!(": {msg}");
+		write!(error, ": {msg}");
 		self.had_error = true;
+
+		eyre::Report::msg(error)
 	}
 
-	pub fn error_at_current(&mut self, msg: &str) {
+	pub fn error_at_current(&mut self, msg: &str) -> eyre::Report {
 		self.error_at(self.current, msg)
 	}
 }

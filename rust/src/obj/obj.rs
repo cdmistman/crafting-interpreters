@@ -64,3 +64,5 @@ impl Display for GcRef<Obj> {
 		}
 	}
 }
+
+impl Trace for Obj {}

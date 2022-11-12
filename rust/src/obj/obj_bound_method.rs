@@ -22,3 +22,5 @@ impl Display for ObjBoundMethod {
 		self.method.function.fmt(f)
 	}
 }
+
+impl Trace for ObjBoundMethod {}

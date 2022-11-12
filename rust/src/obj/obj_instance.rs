@@ -23,3 +23,5 @@ impl Display for ObjInstance {
 		" instance".fmt(f)
 	}
 }
+
+impl Trace for ObjInstance {}

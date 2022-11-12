@@ -1,6 +1,8 @@
 use std::fmt::Display;
 
 use crate::mem::GcRef;
+use crate::mem::Trace;
+use crate::obj::Obj;
 use crate::obj::ObjTy;
 
 #[derive(Clone, Copy)]
@@ -23,7 +25,7 @@ impl Value {
 	}
 
 	#[allow(non_snake_case)]
-	pub fn Obj(obj: GcRef) -> Value {
+	pub fn Obj(obj: GcRef<Obj>) -> Value {
 		Value(ValueKind::Obj, ValueData { obj })
 	}
 }
@@ -41,7 +43,7 @@ pub union ValueData {
 	bool:   bool,
 	nil:    (),
 	number: f64,
-	obj:    GcRef,
+	obj:    GcRef<Obj>,
 }
 
 impl Value {
@@ -59,7 +61,7 @@ impl Value {
 		}
 	}
 
-	pub fn as_obj(&self) -> Option<GcRef> {
+	pub fn as_obj(&self) -> Option<GcRef<Obj>> {
 		let Value(ValueKind::Obj, data) = self else {
 			return None;
 		};
@@ -126,3 +128,5 @@ impl PartialEq for Value {
 }
 
 impl Eq for Value {}
+
+impl Trace for Value {}

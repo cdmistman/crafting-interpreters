@@ -22,3 +22,5 @@ impl Display for ObjNative {
 		"<native fn>".fmt(f)
 	}
 }
+
+impl Trace for ObjNative {}

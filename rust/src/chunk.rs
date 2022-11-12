@@ -1,17 +1,19 @@
 use crate::mem::GcVec;
+use crate::mem::Trace;
 use crate::value::Value;
 
 pub union Bytecode {
-	pub instr: Op,
+	pub op:    Op,
 	pub value: Value,
-	pub index: u8,
+	pub byte:  u8,
 }
+
+impl Trace for Bytecode {}
 
 #[derive(Clone, Copy)]
 #[repr(u8)]
 pub enum Op {
 	// raw value instructions
-	Class,
 	Closure,
 	Constant,
 	False,
@@ -19,23 +21,28 @@ pub enum Op {
 	True,
 
 	// stack interactions
-	Call,
 	Jump,
 	JumpIfFalse,
 	Loop,
 	Pop,
 	Return,
 
+	// call operations
+	Call,
+	Invoke,
+	SuperInvoke,
+
 	// variables
+	CloseUpvalue,
 	DefineGlobal,
 	GetGlobal,
-	SetGlobal,
 	GetLocal,
-	SetLocal,
 	GetProperty,
-	SetProperty,
-	CloseUpvalue,
+	GetSuper,
 	GetUpvalue,
+	SetGlobal,
+	SetLocal,
+	SetProperty,
 	SetUpvalue,
 
 	// comparisons
@@ -53,6 +60,11 @@ pub enum Op {
 	// boolean operations
 	Not,
 
+	// class operations
+	Class,
+	Inherit,
+	Method,
+
 	// other operations
 	Print,
 }
@@ -63,3 +75,12 @@ pub struct Chunk {
 	pub lines:     GcVec<u32>,
 	pub constants: GcVec<Value>,
 }
+
+impl Chunk {
+	pub fn push(&mut self, bytecode: Bytecode, line: u32) {
+		self.bytecode.push(bytecode);
+		self.lines.push(line);
+	}
+}
+
+impl Trace for Chunk {}

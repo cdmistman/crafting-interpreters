@@ -33,3 +33,5 @@ impl Display for ObjFunction {
 		}
 	}
 }
+
+impl Trace for ObjFunction {}

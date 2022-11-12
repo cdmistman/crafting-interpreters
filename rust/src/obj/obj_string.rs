@@ -52,3 +52,5 @@ impl Hash for ObjString {
 		state.write_usize(self.hash);
 	}
 }
+
+impl Trace for ObjString {}

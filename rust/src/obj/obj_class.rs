@@ -21,3 +21,5 @@ impl Display for ObjClass {
 		self.name.fmt(f)
 	}
 }
+
+impl Trace for ObjClass {}

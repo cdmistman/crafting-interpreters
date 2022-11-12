@@ -27,7 +27,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 			use crate::chunk::Op::*;
 
 			let bytecode = self.read_byte();
-			match unsafe { bytecode.instr } {
+			match unsafe { bytecode.op } {
 				Closure => {
 					let Some(function) = self
 						.read_constant()
@@ -40,7 +40,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 
 					for ii in 0..closure.upvalues.len() {
 						let (is_local, slot_index) = unsafe {
-							(self.read_byte().index, self.read_byte().index)
+							(self.read_byte().byte, self.read_byte().byte)
 						};
 						closure.upvalues[ii] = if is_local > 0 {
 							let start_slot = self.frame().slots.cast::<Value>();
@@ -64,7 +64,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 
 				Call => {
 					let arg_count = self.read_byte();
-					let arg_count = unsafe { arg_count.index };
+					let arg_count = unsafe { arg_count.byte };
 					self.call_value(self.peek(arg_count as _), arg_count)?;
 				},
 				Jump => {
@@ -111,7 +111,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				GetLocal => {
 					let slot = self.read_byte();
 					let value = unsafe {
-						let slot = slot.index;
+						let slot = slot.byte;
 						self.frame().slots.as_ref()[slot as usize].assume_init()
 					};
 					self.push(value)
@@ -122,7 +122,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 					let mut slots = self.frame_mut().slots;
 					let slot = unsafe {
 						let slots = slots.as_mut();
-						slots.get_unchecked_mut(slot.index as usize)
+						slots.get_unchecked_mut(slot.byte as usize)
 					};
 					slot.write(value);
 				},
@@ -147,7 +147,7 @@ impl<const MAX_FRAMES: usize, const STACK_SIZE: usize>
 				},
 				GetUpvalue => {
 					let slot = self.read_byte();
-					let slot = unsafe { slot.index };
+					let slot = unsafe { slot.byte };
 					let value =
 						self.frame().closure.upvalues[slot as usize].location;
 					self.push(unsafe { value.as_ref() }.clone());

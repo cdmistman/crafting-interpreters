@@ -5,6 +5,8 @@ use std::mem::MaybeUninit;
 use std::ops::Deref;
 use std::ops::DerefMut;
 
+use super::Trace;
+
 pub struct GcMap<K, V, S = RandomState>(
 	ManuallyDrop<MaybeUninit<Box<HashMap<K, V, S>>>>,
 );
@@ -46,3 +48,5 @@ impl<K, V, S> DerefMut for GcMap<K, V, S> {
 		unsafe { self.0.assume_init_mut() }
 	}
 }
+
+impl<K: Trace, V: Trace> Trace for GcMap<K, V> {}
