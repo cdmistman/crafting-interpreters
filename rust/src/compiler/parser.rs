@@ -1,17 +1,16 @@
 use std::fmt::Write;
 
-use eyre::Result;
-
 use super::scanner::Scanner;
 use super::scanner::Token;
 use super::scanner::TokenKind;
 
+pub type Error = eyre::Report;
+
 pub struct Parser<'source> {
 	pub scanner: Scanner<'source>,
 
-	pub current:   Token<'source>,
-	pub previous:  Option<Token<'source>>,
-	pub had_error: bool,
+	pub current:  Token<'source>,
+	pub previous: Token<'source>,
 }
 
 impl<'source> Parser<'source> {
@@ -21,21 +20,24 @@ impl<'source> Parser<'source> {
 		Self {
 			scanner,
 			current,
-			previous: None,
-			had_error: false,
+			previous: Token {
+				kind: TokenKind::Sof,
+				text: source[0..=0].into(),
+				line: 1,
+			},
 		}
 	}
 
-	pub fn advance(&mut self) {
-		self.previous = Some(self.current);
+	pub fn advance(&mut self, errors: &mut Vec<Error>) -> Token<'source> {
+		self.previous = self.current;
 
 		loop {
 			self.current = self.scanner.scan_token();
 			if self.current.kind != TokenKind::Error {
-				break;
+				return self.current;
 			}
 
-			self.error_at_current(self.current.text);
+			errors.push(self.error_at_current(self.current.text.as_ref()));
 		}
 	}
 
@@ -43,51 +45,48 @@ impl<'source> Parser<'source> {
 		self.current.kind == kind
 	}
 
-	pub fn check_eat(&mut self, kind: TokenKind) -> bool {
-		let res = self.check(kind);
-		if res {
-			self.advance();
-		}
-		res
+	pub fn check_eat(
+		&mut self,
+		kind: TokenKind,
+		errors: &mut Vec<Error>,
+	) -> Option<Token<'source>> {
+		self.check(kind).then(|| self.advance(errors))
 	}
 
 	pub fn consume(
 		&mut self,
 		kind: TokenKind,
-		msg: &str,
-	) -> Result<Token<'source>> {
+		msg: impl AsRef<str>,
+		errors: &mut Vec<Error>,
+	) -> Result<Token<'source>, ()> {
 		if self.check(kind) {
-			let res = self.current;
-			self.advance();
-			Ok(res)
+			Ok(self.advance(errors))
 		} else {
-			Err(self.error_at_current(msg))
+			errors.push(self.error_at_current(msg));
+			Err(())
 		}
 	}
 
-	pub fn error(&mut self, msg: &str) -> eyre::Report {
-		let at = self
-			.previous
-			.expect("error for previous token but there is no previous token");
-		self.error_at(at, msg)
+	pub fn error(&self, msg: impl AsRef<str>) -> Error {
+		error_at(self.previous, msg)
 	}
 
-	pub fn error_at(&mut self, tok: Token<'source>, msg: &str) -> eyre::Report {
-		let mut error = String::with_capacity(22 + msg.len());
-		write!(error, "[line {}] Error", tok.line);
-		match tok.kind {
-			TokenKind::Eof => write!(error, " at end").unwrap(),
-			TokenKind::Error => (),
-			_ => write!(error, " at {}", tok.text).unwrap(),
-		}
-
-		write!(error, ": {msg}");
-		self.had_error = true;
-
-		eyre::Report::msg(error)
+	pub fn error_at_current(&self, msg: impl AsRef<str>) -> Error {
+		error_at(self.current, msg)
 	}
+}
 
-	pub fn error_at_current(&mut self, msg: &str) -> eyre::Report {
-		self.error_at(self.current, msg)
+pub fn error_at(tok: Token, msg: impl AsRef<str>) -> Error {
+	let msg = msg.as_ref();
+	let mut error = String::with_capacity(22 + msg.len());
+
+	write!(error, "[line {}] Error", tok.line);
+	match tok.kind {
+		TokenKind::Eof => write!(error, " at end").unwrap(),
+		TokenKind::Error => (),
+		_ => write!(error, " at {}", tok.text).unwrap(),
 	}
+	write!(error, ": {msg}");
+
+	eyre::Report::msg(error)
 }

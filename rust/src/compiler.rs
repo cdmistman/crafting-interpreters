@@ -1,17 +1,16 @@
 mod compile_declaration;
 mod compile_expression;
 mod compile_statement;
+mod compiler_root;
 mod parser;
 mod scanner;
 mod token;
 mod token_kind;
 
-use std::cell::RefCell;
-use std::rc::Rc;
+use drop_bomb::DropBomb;
 
-use eyre::Context;
-use eyre::Result;
-
+use self::compile_expression::Precedence;
+use self::compiler_root::CompilerRoot;
 use self::parser::Parser;
 use self::token::Token;
 use self::token_kind::TokenKind;
@@ -24,14 +23,16 @@ use crate::obj::ObjFunction;
 use crate::obj::ObjString;
 use crate::value::Value;
 
+type Result<T = (), E = ()> = std::result::Result<T, E>;
+
 const MAX_UPVALUES: usize = u8::MAX as _;
 
 scoped_tls::scoped_thread_local!(static CURRENT: Compiler);
 
-pub struct Compiler<'enclosing, 'source: 'enclosing> {
-	enclosing: Option<&'enclosing Compiler<'enclosing, 'source>>,
+struct ConstId(u8);
 
-	parser: Rc<RefCell<Parser<'source>>>,
+pub struct Compiler<'enclosing, 'source> {
+	root:   CompilerRoot<'enclosing, 'source>,
 	errors: Vec<eyre::Report>,
 
 	function:   GcPtr<ObjFunction>,
@@ -41,6 +42,8 @@ pub struct Compiler<'enclosing, 'source: 'enclosing> {
 	locals:      InlineVec<{ u8::MAX as _ }, Local<'source>>,
 	upvalues:    InlineVec<MAX_UPVALUES, Upvalue>,
 	scope_depth: usize,
+
+	bomb: DropBomb,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -63,86 +66,25 @@ struct Upvalue {
 	is_local: bool,
 }
 
-impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
-	#[doc(hidden)]
-	pub fn trace() {
-		if CURRENT.is_set() {
-			CURRENT.with(|_compiler| todo!())
-		}
-	}
-
-	/// Creates a safe environment for allocating via the Garbage Collector.
-	///
-	/// # Safety
-	/// The callback passed should only be used to create exactly 1 allocation.
-	unsafe fn safe_alloc<T, F: FnOnce() -> T>(&self, f: F) -> T {
-		CURRENT.set(std::mem::transmute(self), f)
-	}
-
-	fn init(
-		parser: Rc<RefCell<Parser<'source>>>,
-		fn_kind: FunctionKind,
-	) -> Self {
-		let p = parser.clone();
-		let mut res = Self {
-			parser,
-			fn_kind,
-			enclosing: None,
-			errors: Vec::new(),
-			function: unsafe { GcPtr::null() },
-			superclass: None,
-			locals: InlineVec::new(),
-			upvalues: InlineVec::new(),
-			scope_depth: 0,
-		};
-
-		res.function = GcPtr::new(unsafe { res.safe_alloc(ObjFunction::new) });
-
-		if fn_kind != FunctionKind::Script {
-			res.function.name = Some(unsafe {
-				res.safe_alloc(move || {
-					ObjString::new(p.borrow().previous.unwrap().text)
-				})
-			});
-		}
-
-		let token_name = (fn_kind == FunctionKind::Function)
-			.then_some("")
-			.unwrap_or("this");
-		res.locals.push(Local {
-			name:        Token::synthetic(token_name),
-			depth:       Some(0),
-			is_captured: false,
-		});
-
-		res
-	}
-
+impl<'source> Compiler<'static, 'source> {
 	pub fn new(source: &'source str) -> Self {
-		Self::init(
-			Rc::new(RefCell::new(Parser::new(source))),
-			FunctionKind::Script,
-		)
+		let parser = Parser::new(source);
+		Compiler::init(CompilerRoot::Parser(parser), FunctionKind::Script)
+	}
+}
+
+impl<'enclosing, 'source> Compiler<'enclosing, 'source> {
+	unsafe fn alloc_safe<T, F: FnOnce() -> T>(&self, f: F) -> T {
+		todo!();
+		CURRENT.set(self, f)
 	}
 
 	fn child<'child: 'enclosing>(
-		&'child self,
+		&'child mut self,
 		fn_kind: FunctionKind,
 	) -> Compiler<'child, 'source> {
-		let parser = self.parser.clone();
-		let mut res = Self::init(parser, fn_kind);
-		res.enclosing = Some(self);
-		res
-	}
-
-	pub fn compile(mut self) -> Result<GcRef<ObjFunction>, Vec<eyre::Report>> {
-		while !self.parser.borrow_mut().check_eat(TokenKind::Eof) {
-			self.declaration();
-		}
-
-		let (fun, ups) = self.finish()?;
-		assert!(ups.is_empty());
-		Ok(fun)
+		let root = CompilerRoot::Compiler(self);
+		Compiler::init(root, fn_kind)
 	}
 
 	fn finish(
@@ -153,160 +95,116 @@ impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 	> {
 		if self.errors.is_empty() {
 			self.emit_return();
+			self.bomb.defuse();
 			Ok((self.function.into(), self.upvalues))
 		} else {
+			self.bomb.defuse();
 			Err(self.errors)
+		}
+	}
+
+	fn init(
+		root: CompilerRoot<'enclosing, 'source>,
+		fn_kind: FunctionKind,
+	) -> Self {
+		let mut compiler = Self {
+			root,
+			fn_kind,
+			scope_depth: 0,
+			superclass: None,
+			errors: Vec::new(),
+			function: unsafe { GcPtr::null() },
+			locals: InlineVec::new(),
+			upvalues: InlineVec::new(),
+			bomb: DropBomb::new("Compiler must be `finish`ed to handle errors"),
+		};
+
+		compiler.function =
+			GcPtr::new(unsafe { compiler.alloc_safe(ObjFunction::new) });
+		if fn_kind != FunctionKind::Script {
+			compiler.function.name = Some(unsafe {
+				compiler.alloc_safe(|| {
+					ObjString::new(compiler.parser().previous.text.as_ref())
+				})
+			});
+		}
+
+		let local_name = (fn_kind == FunctionKind::Function)
+			.then_some("")
+			.unwrap_or("this");
+		compiler.locals.push(Local {
+			name:        Token::synthetic(local_name),
+			depth:       Some(0),
+			is_captured: false,
+		});
+
+		compiler
+	}
+
+	fn trace_current(&self) {
+		todo!()
+	}
+}
+
+impl<'enclosing, 'source> Compiler<'enclosing, 'source> {
+	fn parser(&self) -> &Parser<'source> {
+		let mut root = &self.root;
+		loop {
+			match root {
+				CompilerRoot::Compiler(compiler) => root = &compiler.root,
+				CompilerRoot::Parser(parser) => return &parser,
+			}
+		}
+	}
+
+	fn parser_mut(&mut self) -> &mut Parser<'source> {
+		let mut root = &mut self.root;
+		loop {
+			match root {
+				CompilerRoot::Compiler(compiler) => root = &mut compiler.root,
+				CompilerRoot::Parser(parser) => return &mut parser,
+			}
 		}
 	}
 }
 
-impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
-	fn advance(&mut self) {
-		self.parser.borrow_mut().advance();
+impl<'enclosing, 'source> Compiler<'enclosing, 'source> {
+	fn advance(&mut self) -> Token<'source> {
+		self.parser_mut().advance(&mut self.errors)
 	}
 
-	fn check(&self, kind: TokenKind) -> bool {
-		self.parser.borrow().check(kind)
-	}
-
-	fn check_eat(&mut self, kind: TokenKind) -> bool {
-		self.parser.borrow_mut().check_eat(kind)
+	fn check_eat(&mut self, kind: TokenKind) -> Option<Token<'source>> {
+		self.parser_mut().check_eat(kind, &mut self.errors)
 	}
 
 	fn consume(
 		&mut self,
 		kind: TokenKind,
-		msg: &str,
+		msg: impl AsRef<str>,
 	) -> Result<Token<'source>> {
-		self.parser.borrow_mut().consume(kind, msg)
+		self.parser_mut().consume(kind, msg, &mut self.errors)
 	}
 
-	fn error(&mut self, msg: &str) -> eyre::Report {
-		self.parser.borrow_mut().error(msg)
+	fn error<T>(&mut self, msg: impl AsRef<str>) -> Result<T> {
+		self.errors.push(self.parser().error(msg));
+		Err(())
 	}
 
-	fn error_at(&mut self, tok: Token<'source>, msg: &str) -> eyre::Report {
-		self.parser.borrow_mut().error_at(tok, msg)
+	fn error_at<T>(&mut self, tok: Token, msg: impl AsRef<str>) -> Result<T> {
+		self.errors.push(parser::error_at(tok, msg));
+		Err(())
 	}
 
-	fn error_at_current(&mut self, msg: &str) -> eyre::Report {
-		self.parser.borrow_mut().error_at_current(msg)
-	}
-
-	fn previous(&self) -> Token<'source> {
-		self.parser.borrow().previous.unwrap()
-	}
-}
-
-impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
-	fn add_local(&mut self, name: Token<'source>) -> Result<()> {
-		if self.locals.is_full() {
-			return Err(eyre!("Too many local variables in function."));
-		}
-
-		self.locals.push(Local {
-			name,
-			depth: None,
-			is_captured: false,
-		});
-		Ok(())
-	}
-
-	fn begin_scope(&mut self) {
-		self.scope_depth += 1;
-	}
-
-	fn declare_variable(&mut self) -> Result<()> {
-		if self.scope_depth == 0 {
-			return Ok(());
-		}
-
-		let name = self.previous();
-		for local in self.locals.iter() {
-			if let Some(depth) = local.depth && depth < self.scope_depth {
-				break;
-			}
-
-			if local.name.text == name.text {
-				return Err(eyre!(
-					"Variable {} already defined in this scope.",
-					name.text,
-				));
-			}
-		}
-
-		self.add_local(name)
-			.with_context(|| format!("declaring variable `{}`", name.text))
-	}
-
-	fn define_variable(&mut self, global: u8) {
-		if self.scope_depth > 0 {
-			self.mark_initialized();
-		} else {
-			self.emit_bytes(
-				Bytecode {
-					op: Op::DefineGlobal,
-				},
-				Bytecode { byte: global },
-			)
-		}
-	}
-
-	fn end_scope(&mut self) {
-		self.scope_depth -= 1;
-
-		while let Some(local) = self.locals.last()
-				&& let Some(depth) = local.depth
-				&& depth > self.scope_depth {
-			self.emit_byte(Bytecode {
-				op: if local.is_captured { Op::CloseUpvalue } else { Op::Pop },
-			});
-			self.locals.pop();
-		}
-	}
-
-	fn identifier_constant(&mut self, token: Token) -> Result<u8> {
-		self.make_constant(Value::Obj(ObjString::new(token.text).downcast()))
-			.with_context(|| format!("identifier constant `{}`", token.text))
-	}
-
-	fn make_constant(&mut self, value: Value) -> eyre::Result<u8> {
-		let Ok(const_id) = self.function.chunk.constants.len().try_into() else {
-			return Err(self.error("Too many constants in one chunk."));
-		};
-		self.function.chunk.constants.push(value);
-		Ok(const_id)
-	}
-
-	fn mark_initialized(&mut self) {
-		if self.scope_depth > 0 {
-			let ii = self.locals.len() - 1;
-			let mut local = &mut self.locals[ii];
-			local.depth = Some(self.scope_depth);
-		}
-	}
-
-	fn resolve_local(&mut self, name: Token) -> Result<Option<usize>> {
-		for (ii, local) in self.locals.iter().enumerate() {
-			if local.name.text == name.text {
-				if local.depth.is_none() {
-					return Err(eyre!(
-						"Can't read local variable in its own initializer."
-					));
-				}
-
-				return Ok(Some(ii));
-			}
-		}
-		Ok(None)
+	fn error_at_current<T>(&mut self, msg: impl AsRef<str>) -> Result<T> {
+		self.errors.push(self.parser().error_at_current(msg));
+		Err(())
 	}
 }
 
-impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
+impl<'enclosing, 'source> Compiler<'enclosing, 'source> {
 	fn emit_byte(&mut self, byte: Bytecode) {
-		self.function
-			.chunk
-			.push(byte, self.parser.borrow().previous.unwrap().line)
+		let line = self.parser().previous.line;
+		self.function.chunk.push(byte, line)
 	}
 
 	fn emit_bytes(&mut self, byte1: Bytecode, byte2: Bytecode) {
@@ -321,12 +219,12 @@ impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 		offset
 	}
 
-	fn emit_loop(&mut self, loop_start: usize) -> eyre::Result<()> {
+	fn emit_loop(&mut self, loop_start: usize) -> Result {
 		self.emit_byte(Bytecode { op: Op::Loop });
 
 		let offset = self.function.chunk.bytecode.len() - loop_start + 2;
 		if offset > u16::MAX as _ {
-			return Err(self.error("Loop body too large."));
+			return self.error("Loop body too large.");
 		}
 
 		self.emit_bytes(
@@ -337,7 +235,6 @@ impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 				byte: (offset & 0xFF) as _,
 			},
 		);
-
 		Ok(())
 	}
 
@@ -349,40 +246,145 @@ impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 				}),
 			_ => self.emit_byte(Bytecode { op: Op::Nil }),
 		}
-		self.emit_byte(Bytecode { op: Op::Return })
+		self.emit_byte(Bytecode { op: Op::Return });
+	}
+}
+
+impl<'enclosing, 'source> Compiler<'enclosing, 'source> {
+	fn add_local(&mut self, name: Token<'source>) -> Result {
+		if self.locals.is_full() {
+			return self
+				.error_at(name, "Too many local variables in function.");
+		}
+
+		self.locals.push(Local {
+			name,
+			depth: None,
+			is_captured: false,
+		});
+		Ok(())
+	}
+
+	fn begin_scope(&mut self) {
+		self.scope_depth += 1;
+	}
+
+	fn declare_variable(&mut self) -> Result {
+		if self.scope_depth == 0 {
+			return Ok(());
+		}
+
+		let name = self.parser().previous;
+		for local in self.locals.iter() {
+			if let Some(depth) = local.depth && depth < self.scope_depth {
+				break;
+			}
+
+			if local.name.text == name.text {
+				return self.error_at(
+					name,
+					format!(
+						"Variable {} already defined in this scope.",
+						name.text
+					),
+				);
+			}
+		}
+
+		self.add_local(name)
+	}
+
+	fn define_variable(&mut self, ConstId(byte): ConstId) {
+		if self.scope_depth > 0 {
+			self.mark_initialized();
+		} else {
+			self.emit_bytes(
+				Bytecode {
+					op: Op::DefineGlobal,
+				},
+				Bytecode { byte },
+			);
+		}
+	}
+
+	fn end_scope(&mut self) {
+		self.scope_depth -= 1;
+
+		while let Some(local) = self.locals.last()
+				&& let Some(depth) = local.depth
+				&& depth > self.scope_depth {
+			self.emit_byte(Bytecode {
+				op: if local.is_captured { Op::CloseUpvalue } else { Op::Pop }
+			});
+			self.locals.pop();
+		}
+	}
+
+	fn identifier_constant(&mut self, token: Token) -> Result<ConstId> {
+		let string = unsafe { self.alloc_safe(|| ObjString::new(token.text)) };
+		self.make_constant(Value::Obj(string.downcast()))
+	}
+
+	fn make_constant(&mut self, value: Value) -> Result<ConstId> {
+		let Ok(const_id) = self.function.chunk.constants.len().try_into() else {
+			return self.error("Too many constants in one chunk.");
+		};
+		self.function.chunk.constants.push(value);
+		Ok(ConstId(const_id))
+	}
+
+	fn mark_initialized(&mut self) {
+		if self.scope_depth > 0 {
+			let local_ii = self.locals.len() - 1;
+			let mut local = &mut self.locals[local_ii];
+			local.depth = Some(self.scope_depth);
+		}
+	}
+
+	fn resolve_local(&mut self, name: Token) -> Result<Option<usize>> {
+		for (ii, local) in self.locals.iter().enumerate() {
+			if local.name.text == name.text {
+				if local.depth.is_none() {
+					return self.error_at(
+						name,
+						"Can't read local variable in its own initializer.",
+					);
+				}
+
+				return Ok(Some(ii));
+			}
+		}
+
+		Ok(None)
 	}
 }
 
 impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 	fn block(&mut self) -> Result<()> {
 		while !matches!(
-			self.parser.borrow_mut().current.kind,
+			self.parser().current.kind,
 			TokenKind::RBrace | TokenKind::Eof
 		) {
 			self.declaration();
 		}
 
-		self.consume(TokenKind::RBrace, "Expect '}' after block.")
-			.context("statement")?;
+		self.consume(TokenKind::RBrace, "Expect '}' after block.")?;
 		Ok(())
 	}
 
 	fn declaration(&mut self) {
-		let parse_fn = match self.parser.borrow().current.kind {
+		let parse_fn = match self.parser().current.kind {
 			TokenKind::Class => Self::class_declaration,
 			TokenKind::Fun => Self::fun_declaration,
 			TokenKind::Var => Self::var_declaration,
 			_ => Self::statement,
 		};
-
 		self.advance();
-		if let Err(err) = parse_fn(self) {
-			self.errors.push(err);
-			let mut parser = self.parser.borrow_mut();
 
+		if parse_fn(self).is_err() {
+			let parser = self.parser_mut();
 			while parser.current.kind != TokenKind::Eof {
-				if let Some(Token { kind, .. }) = parser.previous
-						&& kind == TokenKind::Semicolon {
+				if parser.previous.kind == TokenKind::Semicolon {
 					return;
 				}
 
@@ -397,85 +399,119 @@ impl<'enclosing, 'source: 'enclosing> Compiler<'enclosing, 'source> {
 					return;
 				}
 
-				parser.advance();
+				parser.advance(&mut self.errors);
 			}
 		}
 	}
 
-	fn function(&mut self, kind: FunctionKind) -> Result<()> {
-		let mut compiler = self.child(kind);
+	fn expression(&mut self) -> Result {
+		self.parse_precedence(Precedence::Assignment)
+	}
+
+	fn function(&mut self, fn_kind: FunctionKind) -> Result {
+		let mut compiler = self.child(fn_kind);
 		compiler.begin_scope();
 
-		compiler
-			.consume(TokenKind::LParen, "Expect '(' after function name.")?;
-		if !compiler.check(TokenKind::RParen) {
-			loop {
+		if compiler
+			.consume(TokenKind::LParen, "Expect '(' after function name.")
+			.is_err()
+		{
+			compiler.bomb.defuse();
+			self.errors.extend(compiler.errors);
+			return Err(compiler.errors);
+		}
+
+		if !compiler.parser().check(TokenKind::RParen) {
+			let params_ok = loop {
 				compiler.function.arity += 1;
 				if compiler.function.arity > 255 {
-					return Err(compiler.error_at_current(
+					compiler.error_at_current::<()>(
 						"Can't have more than 255 parameters.",
-					));
+					);
+					break false;
 				}
-				let constant =
-					compiler.parse_variable("Expect parameter name.")?;
-				compiler.define_variable(constant);
 
-				if compiler.check_eat(TokenKind::Comma) {
-					break;
+				let var_id =
+					match compiler.parse_variable("Expect parameter name.") {
+						Ok(constant) => constant,
+						Err(error) => break false,
+					};
+				compiler.define_variable(var_id);
+
+				if compiler.check_eat(TokenKind::Comma).is_none() {
+					break true;
+				}
+			};
+			let ok = params_ok && compiler.parser().check(TokenKind::RParen);
+
+			if !ok {
+				while !compiler.parser().check(TokenKind::RParen) {
+					compiler.error_at_current::<()>(
+						"Expect ')' after function parameters.",
+					);
+					compiler.advance();
 				}
 			}
 		}
 
-		compiler.consume(TokenKind::RParen, "Expect ')' after parameters.")?;
-		compiler
-			.consume(TokenKind::LBrace, "Expect '{' before function body.")?;
-		compiler.block().context("function body")?;
+		compiler.advance(); // RParen
 
-		match compiler.finish() {
-			Ok((function, upvalues)) => {
-				let byte = self.make_constant(function.value())?;
-				self.emit_bytes(Bytecode { op: Op::Closure }, Bytecode {
-					byte,
-				});
-				for upvalue in upvalues {
-					let local_byte = upvalue.is_local.then_some(1).unwrap_or(0);
-					self.emit_bytes(Bytecode { byte: local_byte }, Bytecode {
-						byte: upvalue.index,
-					});
-				}
-				Ok(())
-			},
-			Err(errors) => {
-				self.errors.extend(errors);
-				Err(eyre!("encountered errors while parsing function"))
-			},
+		if compiler
+			.consume(TokenKind::LBrace, "Expect '{' before function body.")
+			.is_err()
+		{
+			compiler.bomb.defuse();
+			return Err(compiler.errors);
 		}
+
+		if compiler.block().is_err() {
+			compiler.bomb.defuse();
+			return Err(compiler.errors);
+		}
+
+		compiler.finish().map(|(function, upvalues)| {
+			let ConstId(byte) = self.make_constant(function.value())?;
+			self.emit_bytes(Bytecode { op: Op::Closure }, Bytecode { byte });
+			for upvalue in upvalues {
+				let local_byte = u8::from(upvalue.is_local);
+				self.emit_bytes(Bytecode { byte: local_byte }, Bytecode {
+					byte: upvalue.index,
+				});
+			}
+			Ok(())
+		})
 	}
 
-	fn method(&mut self) -> Result<()> {
-		self.consume(TokenKind::Identifier, "Expect class name.")?;
-		let constant = self
-			.identifier_constant(self.previous())
-			.context("method name")?;
+	fn method(&mut self) -> Result {
+		let name = self.consume(TokenKind::Identifier, "Expect class name.")?;
+		let ConstId(constant) = self.identifier_constant(name)?;
 
-		let kind = if self.previous().text == "init" {
+		let kind = if name.text == "init" {
 			FunctionKind::Initializer
 		} else {
 			FunctionKind::Method
 		};
-		self.function(kind)?;
+		self.function(kind)
+			.map_err(|errs| self.errors.extend(errs))??;
+
 		self.emit_bytes(Bytecode { op: Op::Method }, Bytecode {
 			byte: constant,
 		});
 		Ok(())
 	}
 
-	fn parse_variable(&mut self, error_message: &str) -> Result<u8> {
-		todo!()
+	fn parse_variable(&mut self, error_message: &str) -> Result<ConstId> {
+		let name = self.consume(TokenKind::Identifier, error_message)?;
+		self.declare_variable()?;
+		if self.scope_depth > 0 {
+			Ok(ConstId(0))
+		} else {
+			self.identifier_constant(name)
+		}
 	}
 
 	fn statement(&mut self) -> Result<()> {
-		let parse_fn = match self.parser.borrow().current.kind {
+		let parse_fn = match self.parser().current.kind {
 			TokenKind::LBrace => |p: &mut Self| {
 				p.begin_scope();
 				p.block()?;

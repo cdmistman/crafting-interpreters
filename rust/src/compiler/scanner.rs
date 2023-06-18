@@ -69,7 +69,7 @@ impl<'source> Scanner<'source> {
 	fn error_token(&self, msg: &'static str) -> Token<'source> {
 		Token {
 			kind: TokenKind::Error,
-			text: msg,
+			text: msg.into(),
 			line: self.line_no,
 		}
 	}
@@ -77,7 +77,7 @@ impl<'source> Scanner<'source> {
 	fn make_token(&mut self, kind: TokenKind) -> Token<'source> {
 		let res = Token {
 			kind,
-			text: &self.start[..self.start.len() - self.current.len()],
+			text: (&self.start[..self.start.len() - self.current.len()]).into(),
 			line: self.line_no,
 		};
 		self.start = self.current;

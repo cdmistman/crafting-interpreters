@@ -1,4 +1,4 @@
-#[derive(Clone, Copy, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TokenKind {
 	// single character tokens
 	LParen,
@@ -49,4 +49,5 @@ pub enum TokenKind {
 	// rest
 	Error,
 	Eof,
+	Sof,
 }
